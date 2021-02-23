@@ -1,0 +1,8 @@
+ident = @{ (ASCII_ALPHANUMERIC | "_" )* }
+hole = _{ "{" ~ ident? ~ "}" }
+escaped = { "{{" | "}}" }
+char = { ANY }
+
+segment = _{hole|escaped|char}
+
+formatter = { segment* ~ EOI }

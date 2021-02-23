@@ -1,0 +1,24 @@
+[package]
+name = "hithit_bot"
+version = "0.1.0"
+authors = ["PhotonQuantum <self@lightquantum.me>"]
+edition = "2018"
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+pest = "2.0"
+pest_derive = "2.0"
+log = "0.4"
+pretty_env_logger = "0.4"
+teloxide = { git = "https://github.com/PhotonQuantum/teloxide", branch = "feat-send-entities" }
+teloxide-macros = "0.3"
+tokio = { version = "0.2", features = ["rt-threaded", "macros"] }
+maplit = "1"
+thiserror = "1.0"
+anyhow = "1.0"
+serde = "1"
+serde_json = "1"
+ranges = "0.3"
+const_format = "0.2"
