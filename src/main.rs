@@ -1,5 +1,3 @@
-#![feature(string_drain_as_str)]
-
 #[macro_use]
 extern crate maplit;
 #[macro_use]
