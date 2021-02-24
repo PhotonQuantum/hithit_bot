@@ -47,7 +47,18 @@ pub fn parse_naive(segments: &Segments) -> Result<Formatter> {
         }
     } else {
         data.push(Token::Segment(Segment {
-            text: String::from("了 "),
+            text: String::from(
+                if segments
+                    .inner_ref()
+                    .back()
+                    .map(|segment| segment.text.ends_with("了"))
+                    .unwrap_or(false)
+                {
+                    " "
+                } else {
+                    "了 "
+                },
+            ),
             kind: HashSet::new(),
         }));
         data.push(Token::Hole {
