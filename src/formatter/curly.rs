@@ -33,7 +33,7 @@ pub fn parse_curly(segments: &Segments) -> Result<Formatter> {
                             if !buffer.is_empty() {
                                 ast.push(Token::Segment(Segment {
                                     kind: segment.kind.clone(),
-                                    text: buffer.drain(..).as_str().to_owned(),
+                                    text: buffer.drain(..).collect()
                                 }));
                             };
                             ast.push(Token::Hole {
@@ -68,7 +68,7 @@ pub fn parse_curly(segments: &Segments) -> Result<Formatter> {
                 if !buffer.is_empty() {
                     ast.push(Token::Segment(Segment {
                         kind: segment.kind.clone(),
-                        text: buffer.drain(..).as_str().to_owned(),
+                        text: buffer.drain(..).collect(),
                     }));
                 };
             }
