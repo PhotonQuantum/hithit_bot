@@ -142,7 +142,7 @@ impl Segments {
 
     pub fn trim_end(mut self) -> Self {
         while let Some(back) = self.data.back_mut() {
-            let trimmed = back.text.trim_start().to_string();
+            let trimmed = back.text.trim_end().to_string();
             if trimmed.is_empty() {
                 self.data.pop_back();
             } else if trimmed == back.text.as_str() {
