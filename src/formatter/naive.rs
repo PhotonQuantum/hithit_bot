@@ -51,7 +51,7 @@ pub fn parse_naive(segments: &Segments) -> Result<Formatter> {
                 if segments
                     .inner_ref()
                     .back()
-                    .map(|segment| segment.text.ends_with("了"))
+                    .map(|segment| segment.text.ends_with('了'))
                     .unwrap_or(false)
                 {
                     " "

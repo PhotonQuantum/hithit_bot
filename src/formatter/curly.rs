@@ -1,4 +1,4 @@
-use std::cmp::max;
+// use std::cmp::max;
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -15,7 +15,7 @@ struct FmtParser;
 pub fn parse_curly(segments: &Segments) -> Result<Formatter> {
     let mut ast = vec![];
     let mut anonymous_counter = 0;
-    let mut max_indexed = 0;
+    // let mut max_indexed = 0;
     let mut named: HashSet<String> = HashSet::new();
 
     for segment in segments.inner_ref() {
@@ -33,7 +33,7 @@ pub fn parse_curly(segments: &Segments) -> Result<Formatter> {
                             if !buffer.is_empty() {
                                 ast.push(Token::Segment(Segment {
                                     kind: segment.kind.clone(),
-                                    text: buffer.drain(..).collect()
+                                    text: buffer.drain(..).collect(),
                                 }));
                             };
                             ast.push(Token::Hole {
@@ -43,9 +43,9 @@ pub fn parse_curly(segments: &Segments) -> Result<Formatter> {
                                     if ident.is_empty() {
                                         anonymous_counter += 1;
                                         HoleIdent::Anonymous
-                                    } else if let Ok(idx) = ident.parse::<usize>() {
-                                        max_indexed = max(max_indexed, idx + 1);
-                                        HoleIdent::Indexed(idx)
+                                    // } else if let Ok(idx) = ident.parse::<usize>() {
+                                    //     max_indexed = max(max_indexed, idx + 1);
+                                    //     HoleIdent::Indexed(idx)
                                     } else {
                                         named.insert(ident.to_string());
                                         HoleIdent::Named(ident.to_string())
@@ -79,7 +79,8 @@ pub fn parse_curly(segments: &Segments) -> Result<Formatter> {
 
     Ok(Formatter {
         data: ast,
-        indexed: max(anonymous_counter, max_indexed),
+        // indexed: max(anonymous_counter, max_indexed),
+        indexed: anonymous_counter,
         named,
     })
 }

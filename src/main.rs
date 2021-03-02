@@ -13,6 +13,7 @@ use teloxide::prelude::*;
 use teloxide::types::{MessageEntityKind, User};
 
 use segments::{Segment, Segments};
+use ParseMode::*;
 use ProcessError::*;
 
 use crate::formatter::{parse_curly, parse_naive};
@@ -28,6 +29,12 @@ const EXPLAIN_COMMAND: &str = "/explain";
 const BOT_NAME: &str = "hithit_rs_bot";
 //noinspection RsTypeCheck
 const EXPLAIN_COMMAND_EXTENDED: &str = concatcp!(EXPLAIN_COMMAND, "@", BOT_NAME);
+
+#[derive(Debug, Copy, Clone)]
+enum ParseMode {
+    NaiveMode,
+    CurlyMode,
+}
 
 #[tokio::main]
 async fn main() {
@@ -74,47 +81,74 @@ fn process_ctx(msg: &Message) -> Option<Result<Segments>> {
     if !text.starts_with('/') {
         None
     } else if text.starts_with(EXPLAIN_COMMAND_EXTENDED) {
-        Segments::build(text, entities).drain_head(EXPLAIN_COMMAND_EXTENDED.len() + 1).map(|segments| (segments, true))
+        Segments::build(text, entities)
+            .drain_head(EXPLAIN_COMMAND_EXTENDED.len() + 1)
+            .map(|segments| (segments, true))
     } else if text.starts_with(EXPLAIN_COMMAND) {
-        Segments::build(text, entities).drain_head(EXPLAIN_COMMAND.len() + 1).map(|segments| (segments, true))
+        Segments::build(text, entities)
+            .drain_head(EXPLAIN_COMMAND.len() + 1)
+            .map(|segments| (segments, true))
     } else {
         text.chars().nth(1).and_then(|chr| {
             if chr.len_utf8() > 1 {
-                Segments::build(text, entities).drain_head(1).map(|segments| (segments, true))
+                Segments::build(text, entities)
+                    .drain_head(1)
+                    .map(|x| (x, true))
             } else if chr == '^' {
-                Segments::build(text, entities).drain_head(2).map(|segments| (segments, true))
+                Segments::build(text, entities)
+                    .drain_head(2)
+                    .map(|x| (x, true))
             } else {
-                Segments::build(text, entities).drain_head(1).map(|segments| (segments, false))
+                Segments::build(text, entities)
+                    .drain_head(1)
+                    .map(|x| (x, false))
             }
         })
-    }.map(|(segments, try_naive)| parse_curly(&segments).map_err(SomeError)
-        .and_then(|fmt| {
-            if fmt.indexed_holes() > 0 || !fmt.named_holes().is_empty() {
-                Ok(fmt)
-            } else if try_naive {
-                parse_naive(&segments).map_err(SomeError)
-            } else {
-                Err(NoneError)
-            }
-        })
-        .and_then(|fmt| {
-            fmt.format(&[receiver.clone()],
-                       hashmap! {"sender".to_owned() => sender.clone(), "receiver".to_owned() => receiver.clone()},
-            ).map_err(anyhow::Error::from).map_err(SomeError)
-        })
-        .map(|segments| segments.trim())
-        .map(add_exclaim_mark)
-        .map(|mut segments| {
-            let inner = segments.inner_mut();
-            inner.push_front(empty_segment!());
-            inner.push_front(sender);
-            segments
-        }))
-        .and_then(|maybe_segments| match maybe_segments {
-            Ok(segments) => Some(Ok(segments)),
-            Err(ProcessError::NoneError) => None,
-            Err(ProcessError::SomeError(err)) => Some(Err(err))
-        })
+    }
+    .map(|(segments, try_naive)| {
+        parse_curly(&segments)
+            .map_err(SomeError)
+            .and_then(|fmt| {
+                if fmt.indexed_holes() > 0 || !fmt.named_holes().is_empty() {
+                    Ok((fmt, CurlyMode))
+                } else if try_naive {
+                    parse_naive(&segments)
+                        .map(|x| (x, NaiveMode))
+                        .map_err(SomeError)
+                } else {
+                    Err(NoneError)
+                }
+            })
+            .and_then(|(fmt, mode)| {
+                fmt.format(
+                    &[sender.clone(), receiver.clone()],
+                    hashmap! {"sender".to_owned() => sender.clone(),
+                    "receiver".to_owned() => receiver.clone(),
+                    // the followings are suggested by @tonyxty
+                    "penetrator".to_owned() => sender.clone(),
+                    "1".to_owned() => sender.clone(),
+                    "0".to_owned() => receiver.clone()},
+                )
+                .map_err(anyhow::Error::from)
+                .map_err(SomeError)
+                .map(Segments::trim)
+                .map(add_exclaim_mark)
+                .map(|mut segments| match mode {
+                    NaiveMode => {
+                        let inner = segments.inner_mut();
+                        inner.push_front(empty_segment!());
+                        inner.push_front(sender);
+                        segments
+                    }
+                    CurlyMode => segments,
+                })
+            })
+    })
+    .and_then(|maybe_segments| match maybe_segments {
+        Ok(segments) => Some(Ok(segments)),
+        Err(ProcessError::NoneError) => None,
+        Err(ProcessError::SomeError(err)) => Some(Err(err)),
+    })
 }
 
 fn error_report<T: Into<anyhow::Error>>(err: T) -> VecDeque<Segment> {
