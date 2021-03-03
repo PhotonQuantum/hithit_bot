@@ -6,9 +6,11 @@ extern crate pest_derive;
 extern crate thiserror;
 
 use std::collections::{HashSet, VecDeque};
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use const_format::concatcp;
+use lru_cache::LruCache;
 use teloxide::prelude::*;
 use teloxide::types::MessageEntityKind;
 
@@ -34,6 +36,21 @@ const EXPLAIN_COMMAND_EXTENDED: &str = concatcp!(EXPLAIN_COMMAND, "@", BOT_NAME)
 enum ParseMode {
     NaiveMode,
     CurlyMode,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+struct MessageId {
+    chat_id: i64,
+    message_id: i32,
+}
+
+impl MessageId {
+    pub fn from_message(msg: &Message) -> Self {
+        MessageId {
+            chat_id: msg.chat.id,
+            message_id: msg.id,
+        }
+    }
 }
 
 #[tokio::main]
@@ -152,71 +169,165 @@ fn error_report<T: Into<anyhow::Error>>(err: T) -> VecDeque<Segment> {
     deque
 }
 
+fn elaborate(update: &Message, reply: Result<Segments>) -> Segments {
+    let orig_segments = Segments::build(update.text().unwrap(), update.entities().unwrap());
+    let mut deque = VecDeque::new();
+    deque.push_back(Segment {
+        kind: hashset! {MessageEntityKind::Bold},
+        text: String::from("Input:\n"),
+    });
+    deque.push_back(Segment {
+        kind: hashset! {MessageEntityKind::Code},
+        text: format!("{:#?}\n", orig_segments),
+    });
+    match reply {
+        Ok(segments) => {
+            deque.push_back(Segment {
+                kind: hashset! {MessageEntityKind::Bold},
+                text: String::from("Rendered:\n"),
+            });
+            deque.push_back(Segment {
+                kind: hashset! {MessageEntityKind::Code},
+                text: format!("{:#?}", segments),
+            });
+            Segments::from(deque)
+        }
+        Err(err) => {
+            deque.extend(error_report(err));
+            Segments::from(deque)
+        }
+    }
+}
+
 async fn run() {
     teloxide::enable_logging!();
     log::info!("Starting hithit bot");
 
     let bot = Bot::builder().build();
 
-    teloxide::repl(bot, |msg| async move {
-        log::debug!(
-            "Income message: {:?} {:?}",
-            msg.update.text(),
-            msg.update.entities()
-        );
+    let sent_map = Arc::new(Mutex::new(LruCache::new(8192)));
+    let sent_map_new = sent_map.clone();
+    let sent_map_edited = sent_map.clone();
 
-        let reply = process_ctx(&msg.update)
-            .map(|reply| {
-                log::debug!("Reply: {:?}", reply);
-                reply
-            })
-            .map(|reply| {
-                let text = msg.update.text().unwrap();
-                if text.starts_with(EXPLAIN_COMMAND) {
-                    let orig_segments =
-                        Segments::build(msg.update.text().unwrap(), msg.update.entities().unwrap());
-                    let mut deque = VecDeque::new();
-                    deque.push_back(Segment {
-                        kind: hashset! {MessageEntityKind::Bold},
-                        text: String::from("Input:\n"),
+    Dispatcher::new(bot)
+        .messages_handler(move |rx: DispatcherHandlerRx<Message>| {
+            rx.for_each(move |upd| {
+                let sent_map_new = sent_map_new.clone();
+                async move {
+                    let update = &upd.update;
+                    let reply = process_ctx(update).map(|reply| {
+                        let text = update.text().unwrap();
+                        if text.starts_with(EXPLAIN_COMMAND) {
+                            elaborate(update, reply)
+                        } else {
+                            reply.unwrap_or_else(|err| error_report(err).into())
+                        }
                     });
-                    deque.push_back(Segment {
-                        kind: hashset! {MessageEntityKind::Code},
-                        text: format!("{:#?}\n", orig_segments),
-                    });
+
                     match reply {
-                        Ok(segments) => {
-                            deque.push_back(Segment {
-                                kind: hashset! {MessageEntityKind::Bold},
-                                text: String::from("Rendered:\n"),
-                            });
-                            deque.push_back(Segment {
-                                kind: hashset! {MessageEntityKind::Code},
-                                text: format!("{:#?}", segments),
-                            });
-                            Segments::from(deque)
+                        None => {}
+                        Some(segments) => {
+                            let text = segments.text();
+                            let entities = segments.entities();
+                            log::info!(
+                                "Income: {} Reply: {}",
+                                update.text().unwrap_or("<empty>"),
+                                text
+                            );
+
+                            let sent_reply = upd.answer(text).entities(entities).send().await;
+
+                            if let Ok(sent_reply) = sent_reply {
+                                let mut sent_map = sent_map_new.lock().unwrap();
+                                sent_map.insert(
+                                    MessageId::from_message(update),
+                                    MessageId::from_message(&sent_reply),
+                                );
+                            }
                         }
-                        Err(err) => {
-                            deque.extend(error_report(err));
-                            Segments::from(deque)
-                        }
-                    }
-                } else {
-                    reply.unwrap_or_else(|err| error_report(err).into())
+                    };
                 }
-            });
+            })
+        })
+        .edited_messages_handler(move |rx: DispatcherHandlerRx<Message>| {
+            rx.for_each(move |upd| {
+                let sent_map_edited = sent_map_edited.clone();
+                async move {
+                    let bot = &upd.bot;
+                    let update = &upd.update;
+                    let unique_id = MessageId::from_message(update);
+                    let reply = process_ctx(update).map(|reply| {
+                        let text = update.text().unwrap();
+                        if text.starts_with(EXPLAIN_COMMAND) {
+                            elaborate(update, reply)
+                        } else {
+                            reply.unwrap_or_else(|err| error_report(err).into())
+                        }
+                    });
 
-        match reply {
-            None => {}
-            Some(segments) => {
-                msg.answer(segments.text())
-                    .entities(segments.entities())
-                    .send()
-                    .await?;
-            }
-        };
+                    match reply {
+                        None => {
+                            let maybe_reply_id =
+                                sent_map_edited.lock().unwrap().get_mut(&unique_id).copied();
+                            if let Some(reply_id) = maybe_reply_id {
+                                log::info!(
+                                    "Edited: {} [Withdraw]",
+                                    update.text().unwrap_or("<empty>")
+                                );
+                                bot.delete_message(reply_id.chat_id, reply_id.message_id)
+                                    .send()
+                                    .await
+                                    .log_on_error()
+                                    .await;
+                                sent_map_edited.lock().unwrap().remove(&unique_id);
+                            }
+                        }
+                        Some(segments) => {
+                            let text = segments.text();
+                            let entities = segments.entities();
 
-        respond(())
-    })
-    .await;
+                            let maybe_reply_id =
+                                sent_map_edited.lock().unwrap().get_mut(&unique_id).copied();
+                            let sent_reply = match maybe_reply_id {
+                                None => {
+                                    log::info!(
+                                        "Edited: {} New: {}",
+                                        update.text().unwrap_or("<empty>"),
+                                        text
+                                    );
+                                    upd.reply_to(text).entities(entities).send().await
+                                }
+                                Some(reply_id) => {
+                                    log::info!(
+                                        "Edited: {} Update: {}",
+                                        update.text().unwrap_or("<empty>"),
+                                        text
+                                    );
+                                    bot.edit_message_text(
+                                        reply_id.chat_id,
+                                        reply_id.message_id,
+                                        text.clone(),
+                                    )
+                                    .entities(entities.clone())
+                                    .send()
+                                    .await
+                                }
+                            };
+
+                            if let Ok(sent_reply) = sent_reply {
+                                let mut sent_map = sent_map_edited.lock().unwrap();
+                                sent_map.insert(
+                                    MessageId::from_message(update),
+                                    MessageId::from_message(&sent_reply),
+                                );
+                            } else {
+                                log::error!("Failed to reply/edit message.")
+                            }
+                        }
+                    };
+                }
+            })
+        })
+        .dispatch()
+        .await;
 }
