@@ -26,7 +26,7 @@ pub fn parse_naive(segments: &Segments) -> Result<Formatter> {
                     }),
                     Token::Hole {
                         kind: segment.kind.clone(),
-                        ident: HoleIdent::Named(String::from("receiver")),
+                        ident: HoleIdent::Anonymous,
                     },
                     Token::Segment(Segment {
                         kind: segment.kind.clone(),
@@ -63,7 +63,7 @@ pub fn parse_naive(segments: &Segments) -> Result<Formatter> {
         }));
         data.push(Token::Hole {
             kind: HashSet::new(),
-            ident: HoleIdent::Named(String::from("receiver")),
+            ident: HoleIdent::Anonymous,
         });
         Formatter {
             data,
