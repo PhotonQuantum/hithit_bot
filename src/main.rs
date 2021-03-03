@@ -122,12 +122,10 @@ fn process_ctx(msg: &Message) -> Option<Result<Segments>> {
             .and_then(|(fmt, mode)| {
                 fmt.format(
                     &[sender.clone(), receiver.clone()],
-                    hashmap! {"sender".to_owned() => sender.clone(),
-                    "receiver".to_owned() => receiver.clone(),
-                    // the followings are suggested by @tonyxty
-                    "penetrator".to_owned() => sender.clone(),
-                    "1".to_owned() => sender.clone(),
-                    "0".to_owned() => receiver.clone()},
+                    hashmap! {"sender" => sender.clone(),
+                    "receiver" => receiver.clone(),
+                    "penetrator" => sender.clone(),  // suggested by @tonyxty
+                    },
                 )
                 .map_err(anyhow::Error::from)
                 .map_err(SomeError)

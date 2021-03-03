@@ -23,7 +23,7 @@ pub enum FormatError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum HoleIdent {
     Anonymous,
-    // Indexed(usize),
+    Indexed(usize),
     Named(String),
 }
 
@@ -53,7 +53,7 @@ impl Formatter {
     pub fn format(
         &self,
         indexed_args: &[Segment],
-        named_args: HashMap<String, Segment>,
+        named_args: HashMap<&str, Segment>,
     ) -> Result<Segments, FormatError> {
         let mut implicit_idx: usize = 0;
 
@@ -74,18 +74,18 @@ impl Formatter {
                             Err(InvalidIndex(implicit_idx))
                         }
                     }
-                    // HoleIdent::Indexed(idx) => {
-                    //     if let Some(value) = indexed_args.get(*idx) {
-                    //         Ok(Segment {
-                    //             kind: kind.clone().union(&value.kind).cloned().collect(),
-                    //             text: value.text.clone(),
-                    //         })
-                    //     } else {
-                    //         Err(InvalidIndex(*idx))
-                    //     }
-                    // }
+                    HoleIdent::Indexed(idx) => {
+                        if let Some(value) = indexed_args.get(*idx) {
+                            Ok(Segment {
+                                kind: kind.clone().union(&value.kind).cloned().collect(),
+                                text: value.text.clone(),
+                            })
+                        } else {
+                            Err(InvalidIndex(*idx))
+                        }
+                    }
                     HoleIdent::Named(name) => {
-                        if let Some(value) = named_args.get(name) {
+                        if let Some(value) = named_args.get(name.as_str()) {
                             Ok(Segment {
                                 kind: kind.clone().union(&value.kind).cloned().collect(),
                                 text: value.text.clone(),
