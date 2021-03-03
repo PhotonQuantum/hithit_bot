@@ -2,12 +2,37 @@ use std::collections::{Bound, HashMap, HashSet, VecDeque};
 use std::ops::RangeBounds;
 
 use ranges::Ranges;
-use teloxide::types::{MessageEntity, MessageEntityKind};
+use teloxide::types::{MessageEntity, MessageEntityKind, User};
 
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
 pub struct Segment {
     pub kind: HashSet<MessageEntityKind>,
     pub text: String,
+}
+
+impl Segment {
+    pub fn from_user_with_name(user: &User, name: String) -> Self {
+        Segment {
+            text: name,
+            kind: hashset!(MessageEntityKind::TextMention { user: user.clone() }),
+        }
+    }
+    pub fn from_user(user: &User) -> Self {
+        Self::from_user_with_name(
+            user,
+            if let Some(last_name) = &user.last_name {
+                format!("{} {}", user.first_name, last_name)
+            } else {
+                user.first_name.clone()
+            },
+        )
+    }
+}
+
+impl From<&User> for Segment {
+    fn from(user: &User) -> Self {
+        Self::from_user(user)
+    }
 }
 
 #[macro_export]

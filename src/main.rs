@@ -10,7 +10,7 @@ use std::collections::{HashSet, VecDeque};
 use anyhow::Result;
 use const_format::concatcp;
 use teloxide::prelude::*;
-use teloxide::types::{MessageEntityKind, User};
+use teloxide::types::MessageEntityKind;
 
 use segments::{Segment, Segments};
 use ParseMode::*;
@@ -41,29 +41,15 @@ async fn main() {
     run().await;
 }
 
-fn get_user(user: &User) -> Segment {
-    Segment {
-        text: if let Some(last_name) = &user.last_name {
-            format!("{} {}", user.first_name, last_name)
-        } else {
-            user.first_name.clone()
-        },
-        kind: hashset!(MessageEntityKind::TextMention { user: user.clone() }),
-    }
-}
-
 fn get_reply_user(message: &Message) -> Option<Segment> {
-    Some(if let Some(reply_msg) = message.reply_to_message() {
+    if let Some(reply_msg) = message.reply_to_message() {
         let user = reply_msg.from()?;
-        get_user(user)
+        user.into()
     } else {
-        Segment {
-            text: String::from("自己"),
-            kind: hashset!(MessageEntityKind::TextMention {
-                user: message.from()?.clone()
-            }),
-        }
-    })
+        let user = message.from()?;
+        Segment::from_user_with_name(user, String::from("自己"))
+    }
+    .into()
 }
 
 #[derive(Debug)]
@@ -75,7 +61,8 @@ enum ProcessError {
 fn process_ctx(msg: &Message) -> Option<Result<Segments>> {
     let text = msg.text()?;
     let entities = msg.entities()?;
-    let sender = get_user(msg.from()?);
+    let sender = Segment::from_user(msg.from()?);
+    let me = Segment::from_user_with_name(msg.from()?, String::from("自己"));
     let receiver = get_reply_user(msg)?;
 
     if !text.starts_with('/') {
@@ -125,6 +112,9 @@ fn process_ctx(msg: &Message) -> Option<Result<Segments>> {
                     hashmap! {"sender" => sender.clone(),
                     "receiver" => receiver.clone(),
                     "penetrator" => sender.clone(),  // suggested by @tonyxty
+                    "self" => me.clone(),
+                    "me" => me.clone(),
+                    "this" => me.clone()
                     },
                 )
                 .map_err(anyhow::Error::from)
