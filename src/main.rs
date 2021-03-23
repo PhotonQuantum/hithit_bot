@@ -12,7 +12,7 @@ use anyhow::Result;
 use const_format::concatcp;
 use lru_cache::LruCache;
 use teloxide::prelude::*;
-use teloxide::types::MessageEntityKind;
+use teloxide::types::{MessageEntityKind, User};
 
 use segments::{Segment, Segments};
 use ParseMode::*;
@@ -38,17 +38,19 @@ enum ParseMode {
     CurlyMode,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-struct MessageId {
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+struct MessageMeta {
     chat_id: i64,
     message_id: i32,
+    sender: User,
 }
 
-impl MessageId {
+impl MessageMeta {
     pub fn from_message(msg: &Message) -> Self {
-        MessageId {
+        MessageMeta {
             chat_id: msg.chat.id,
             message_id: msg.id,
+            sender: msg.from().unwrap().clone(),
         }
     }
 }
@@ -58,10 +60,32 @@ async fn main() {
     run().await;
 }
 
-fn get_reply_user(message: &Message) -> Option<Segment> {
+fn get_reply_user(
+    bot_user: &User,
+    rev_sent_msg: &mut LruCache<MessageMeta, MessageMeta>,
+    message: &Message,
+) -> Option<Segment> {
     if let Some(reply_msg) = message.reply_to_message() {
         let user = reply_msg.from()?;
-        user.into()
+        if user == bot_user {
+            let test = rev_sent_msg.get_mut(&MessageMeta::from_message(reply_msg));
+            test.map(|msg| {
+                let sender = &msg.sender;
+                message
+                    .from()
+                    .map(|curr_sender| {
+                        if sender == curr_sender {
+                            Segment::from_user_with_name(user, String::from("自己"))
+                        } else {
+                            sender.into()
+                        }
+                    })
+                    .unwrap_or_else(|| sender.into())
+            })
+            .unwrap_or_else(|| user.into())
+        } else {
+            user.into()
+        }
     } else {
         let user = message.from()?;
         Segment::from_user_with_name(user, String::from("自己"))
@@ -75,12 +99,16 @@ enum ProcessError {
     SomeError(anyhow::Error),
 }
 
-fn process_ctx(msg: &Message) -> Option<Result<Segments>> {
+fn process_ctx(
+    bot_user: &User,
+    rev_sent_msg: &mut LruCache<MessageMeta, MessageMeta>,
+    msg: &Message,
+) -> Option<Result<Segments>> {
     let text = msg.text()?;
     let entities = msg.entities()?;
     let sender = Segment::from_user(msg.from()?);
     let me = Segment::from_user_with_name(msg.from()?, String::from("自己"));
-    let receiver = get_reply_user(msg)?;
+    let receiver = get_reply_user(bot_user, rev_sent_msg, msg)?;
 
     if !text.starts_with('/') {
         None
@@ -209,20 +237,27 @@ async fn run() {
     let sent_map_new = sent_map.clone();
     let sent_map_edited = sent_map.clone();
 
+    let rev_sent_map = Arc::new(Mutex::new(LruCache::new(8192)));
+    let rev_sent_map_new = rev_sent_map.clone();
+    let rev_sent_map_edited = rev_sent_map.clone();
+
     Dispatcher::new(bot)
         .messages_handler(move |rx: DispatcherHandlerRx<Message>| {
             rx.for_each(move |upd| {
                 let sent_map_new = sent_map_new.clone();
+                let rev_sent_map_new = rev_sent_map_new.clone();
                 async move {
                     let update = &upd.update;
-                    let reply = process_ctx(update).map(|reply| {
-                        let text = update.text().unwrap();
-                        if text.starts_with(EXPLAIN_COMMAND) {
-                            elaborate(update, reply)
-                        } else {
-                            reply.unwrap_or_else(|err| error_report(err).into())
-                        }
-                    });
+                    let me = &upd.bot.get_me().send().await.unwrap().user;
+                    let reply = process_ctx(me, &mut *rev_sent_map_new.lock().unwrap(), update)
+                        .map(|reply| {
+                            let text = update.text().unwrap();
+                            if text.starts_with(EXPLAIN_COMMAND) {
+                                elaborate(update, reply)
+                            } else {
+                                reply.unwrap_or_else(|err| error_report(err).into())
+                            }
+                        });
 
                     match reply {
                         None => {}
@@ -240,8 +275,13 @@ async fn run() {
                             if let Ok(sent_reply) = sent_reply {
                                 let mut sent_map = sent_map_new.lock().unwrap();
                                 sent_map.insert(
-                                    MessageId::from_message(update),
-                                    MessageId::from_message(&sent_reply),
+                                    MessageMeta::from_message(update),
+                                    MessageMeta::from_message(&sent_reply),
+                                );
+                                let mut rev_sent_map = rev_sent_map_new.lock().unwrap();
+                                rev_sent_map.insert(
+                                    MessageMeta::from_message(&sent_reply),
+                                    MessageMeta::from_message(update),
                                 );
                             }
                         }
@@ -252,23 +292,26 @@ async fn run() {
         .edited_messages_handler(move |rx: DispatcherHandlerRx<Message>| {
             rx.for_each(move |upd| {
                 let sent_map_edited = sent_map_edited.clone();
+                let rev_sent_map_edited = rev_sent_map_edited.clone();
                 async move {
                     let bot = &upd.bot;
                     let update = &upd.update;
-                    let unique_id = MessageId::from_message(update);
-                    let reply = process_ctx(update).map(|reply| {
-                        let text = update.text().unwrap();
-                        if text.starts_with(EXPLAIN_COMMAND) {
-                            elaborate(update, reply)
-                        } else {
-                            reply.unwrap_or_else(|err| error_report(err).into())
-                        }
-                    });
+                    let unique_id = MessageMeta::from_message(update);
+                    let me = &upd.bot.get_me().send().await.unwrap().user;
+                    let reply = process_ctx(me, &mut *rev_sent_map_edited.lock().unwrap(), update)
+                        .map(|reply| {
+                            let text = update.text().unwrap();
+                            if text.starts_with(EXPLAIN_COMMAND) {
+                                elaborate(update, reply)
+                            } else {
+                                reply.unwrap_or_else(|err| error_report(err).into())
+                            }
+                        });
 
                     match reply {
                         None => {
                             let maybe_reply_id =
-                                sent_map_edited.lock().unwrap().get_mut(&unique_id).copied();
+                                sent_map_edited.lock().unwrap().get_mut(&unique_id).cloned();
                             if let Some(reply_id) = maybe_reply_id {
                                 log::info!(
                                     "Edited: {} [Withdraw]",
@@ -287,7 +330,7 @@ async fn run() {
                             let entities = segments.entities();
 
                             let maybe_reply_id =
-                                sent_map_edited.lock().unwrap().get_mut(&unique_id).copied();
+                                sent_map_edited.lock().unwrap().get_mut(&unique_id).cloned();
                             let sent_reply = match maybe_reply_id {
                                 None => {
                                     log::info!(
@@ -317,8 +360,13 @@ async fn run() {
                             if let Ok(sent_reply) = sent_reply {
                                 let mut sent_map = sent_map_edited.lock().unwrap();
                                 sent_map.insert(
-                                    MessageId::from_message(update),
-                                    MessageId::from_message(&sent_reply),
+                                    MessageMeta::from_message(update),
+                                    MessageMeta::from_message(&sent_reply),
+                                );
+                                let mut rev_sent_map = rev_sent_map_edited.lock().unwrap();
+                                rev_sent_map.insert(
+                                    MessageMeta::from_message(&sent_reply),
+                                    MessageMeta::from_message(update),
                                 );
                             } else {
                                 log::error!("Failed to reply/edit message.")
