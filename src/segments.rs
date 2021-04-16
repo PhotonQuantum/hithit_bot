@@ -86,7 +86,7 @@ impl Segments {
         stack.push(EntityRange {
             kind: None,
             start: 0,
-            end: text.len(),
+            end: text.encode_utf16().count(),
         });
 
         while let Some(next) = ranges.last() {
@@ -95,7 +95,13 @@ impl Segments {
                 if offset < curr.end {
                     segments.push_back(Segment {
                         kind: kinds(&stack),
-                        text: text.chars().skip(offset).take(curr.end - offset).collect(),
+                        text: String::from_utf16_lossy(
+                            &text
+                                .encode_utf16()
+                                .skip(offset)
+                                .take(curr.end - offset)
+                                .collect::<Vec<u16>>(),
+                        ),
                     });
                 }
                 offset = curr.end;
@@ -104,11 +110,13 @@ impl Segments {
                 if next.start > offset {
                     segments.push_back(Segment {
                         kind: kinds(&stack),
-                        text: text
-                            .chars()
-                            .skip(offset)
-                            .take(next.start - offset)
-                            .collect(),
+                        text: String::from_utf16_lossy(
+                            &text
+                                .encode_utf16()
+                                .skip(offset)
+                                .take(next.start - offset)
+                                .collect::<Vec<u16>>(),
+                        ),
                     });
                     offset = next.start;
                 }
@@ -119,7 +127,12 @@ impl Segments {
         while let Some(curr) = stack.last() {
             segments.push_back(Segment {
                 kind: kinds(&stack),
-                text: text.chars().skip(offset).take(curr.end - offset).collect(),
+                text: String::from_utf16_lossy(
+                    &text.encode_utf16()
+                        .skip(offset)
+                        .take(curr.end - offset)
+                        .collect::<Vec<u16>>(),
+                ),
             });
             offset = curr.end;
             stack.pop();
@@ -133,7 +146,7 @@ impl Segments {
         while to_drain > 0 && !self.data.is_empty() {
             let front = self.data.front_mut().unwrap();
             let text = &front.text;
-            let data_len = text.len();
+            let data_len = text.chars().count();
             if data_len >= to_drain {
                 front.text = front.text.chars().skip(to_drain).collect();
                 to_drain = 0;
@@ -195,7 +208,7 @@ impl Segments {
         let mut offset: usize = 0;
         let mut entity_buckets: HashMap<MessageEntityKind, Ranges<usize>> = HashMap::new();
         for segment in &self.data {
-            let length = segment.text.chars().count();
+            let length = segment.text.encode_utf16().count();
             for kind in &segment.kind {
                 if !entity_buckets.contains_key(kind) {
                     entity_buckets.insert(kind.clone(), Ranges::new());
