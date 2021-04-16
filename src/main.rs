@@ -198,11 +198,21 @@ fn error_report<T: Into<anyhow::Error>>(err: T) -> VecDeque<Segment> {
 }
 
 fn elaborate(update: &Message, reply: Result<Segments>) -> Segments {
-    let orig_segments = Segments::build(update.text().unwrap(), update.entities().unwrap());
+    let text = update.text().unwrap();
+    let entities = update.entities().unwrap();
+    let orig_segments = Segments::build(text, entities);
     let mut deque = VecDeque::new();
     deque.push_back(Segment {
         kind: hashset! {MessageEntityKind::Bold},
         text: String::from("Input:\n"),
+    });
+    deque.push_back(Segment {
+        kind: hashset! {MessageEntityKind::Code},
+        text: format!("{}\n{:#?}\n", text, entities),
+    });
+    deque.push_back(Segment {
+        kind: hashset! {MessageEntityKind::Bold},
+        text: String::from("Parsed:\n"),
     });
     deque.push_back(Segment {
         kind: hashset! {MessageEntityKind::Code},
@@ -216,7 +226,15 @@ fn elaborate(update: &Message, reply: Result<Segments>) -> Segments {
             });
             deque.push_back(Segment {
                 kind: hashset! {MessageEntityKind::Code},
-                text: format!("{:#?}", segments),
+                text: format!("{:#?}\n", segments),
+            });
+            deque.push_back(Segment {
+                kind: hashset! {MessageEntityKind::Bold},
+                text: String::from("Output:\n"),
+            });
+            deque.push_back(Segment {
+                kind: hashset! {MessageEntityKind::Code},
+                text: format!("{}\n{:#?}", segments.text(), segments.entities()),
             });
             Segments::from(deque)
         }
