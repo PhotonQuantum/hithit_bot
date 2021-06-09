@@ -266,44 +266,47 @@ async fn run() {
                 let rev_sent_map_new = rev_sent_map_new.clone();
                 async move {
                     let update = &upd.update;
-                    let me = &upd.bot.get_me().send().await.unwrap().user;
-                    let reply = process_ctx(me, &mut *rev_sent_map_new.lock().unwrap(), update)
-                        .map(|reply| {
-                            let text = update.text().unwrap();
-                            if text.starts_with(EXPLAIN_COMMAND) {
-                                elaborate(update, reply)
-                            } else {
-                                reply.unwrap_or_else(|err| error_report(err).into())
-                            }
-                        });
+                    let maybe_me = upd.bot.get_me().send().await;
+                    if let Ok(me) = maybe_me {
+                        let me = &me.user;
+                        let reply = process_ctx(me, &mut *rev_sent_map_new.lock().unwrap(), update)
+                            .map(|reply| {
+                                let text = update.text().unwrap();
+                                if text.starts_with(EXPLAIN_COMMAND) {
+                                    elaborate(update, reply)
+                                } else {
+                                    reply.unwrap_or_else(|err| error_report(err).into())
+                                }
+                            });
 
-                    match reply {
-                        None => {}
-                        Some(segments) => {
-                            let text = segments.text();
-                            let entities = segments.entities();
-                            log::info!(
-                                "Income: {} Reply: {}",
-                                update.text().unwrap_or("<empty>"),
-                                text
-                            );
-
-                            let sent_reply = upd.answer(text).entities(entities).send().await;
-
-                            if let Ok(sent_reply) = sent_reply {
-                                let mut sent_map = sent_map_new.lock().unwrap();
-                                sent_map.insert(
-                                    MessageMeta::from_message(update),
-                                    MessageMeta::from_message(&sent_reply),
+                        match reply {
+                            None => {}
+                            Some(segments) => {
+                                let text = segments.text();
+                                let entities = segments.entities();
+                                log::info!(
+                                    "Income: {} Reply: {}",
+                                    update.text().unwrap_or("<empty>"),
+                                    text
                                 );
-                                let mut rev_sent_map = rev_sent_map_new.lock().unwrap();
-                                rev_sent_map.insert(
-                                    MessageMeta::from_message(&sent_reply),
-                                    MessageMeta::from_message(update),
-                                );
+
+                                let sent_reply = upd.answer(text).entities(entities).send().await;
+
+                                if let Ok(sent_reply) = sent_reply {
+                                    let mut sent_map = sent_map_new.lock().unwrap();
+                                    sent_map.insert(
+                                        MessageMeta::from_message(update),
+                                        MessageMeta::from_message(&sent_reply),
+                                    );
+                                    let mut rev_sent_map = rev_sent_map_new.lock().unwrap();
+                                    rev_sent_map.insert(
+                                        MessageMeta::from_message(&sent_reply),
+                                        MessageMeta::from_message(update),
+                                    );
+                                }
                             }
-                        }
-                    };
+                        };
+                    }
                 }
             })
         })
@@ -315,82 +318,87 @@ async fn run() {
                     let bot = &upd.bot;
                     let update = &upd.update;
                     let unique_id = MessageMeta::from_message(update);
-                    let me = &upd.bot.get_me().send().await.unwrap().user;
-                    let reply = process_ctx(me, &mut *rev_sent_map_edited.lock().unwrap(), update)
-                        .map(|reply| {
-                            let text = update.text().unwrap();
-                            if text.starts_with(EXPLAIN_COMMAND) {
-                                elaborate(update, reply)
-                            } else {
-                                reply.unwrap_or_else(|err| error_report(err).into())
-                            }
-                        });
+                    let maybe_me = upd.bot.get_me().send().await;
+                    if let Ok(me) = maybe_me {
+                        let me = &me.user;
+                        let reply =
+                            process_ctx(me, &mut *rev_sent_map_edited.lock().unwrap(), update).map(
+                                |reply| {
+                                    let text = update.text().unwrap();
+                                    if text.starts_with(EXPLAIN_COMMAND) {
+                                        elaborate(update, reply)
+                                    } else {
+                                        reply.unwrap_or_else(|err| error_report(err).into())
+                                    }
+                                },
+                            );
 
-                    match reply {
-                        None => {
-                            let maybe_reply_id =
-                                sent_map_edited.lock().unwrap().get_mut(&unique_id).cloned();
-                            if let Some(reply_id) = maybe_reply_id {
-                                log::info!(
-                                    "Edited: {} [Withdraw]",
-                                    update.text().unwrap_or("<empty>")
-                                );
-                                bot.delete_message(reply_id.chat_id, reply_id.message_id)
-                                    .send()
-                                    .await
-                                    .log_on_error()
-                                    .await;
-                                sent_map_edited.lock().unwrap().remove(&unique_id);
-                            }
-                        }
-                        Some(segments) => {
-                            let text = segments.text();
-                            let entities = segments.entities();
-
-                            let maybe_reply_id =
-                                sent_map_edited.lock().unwrap().get_mut(&unique_id).cloned();
-                            let sent_reply = match maybe_reply_id {
-                                None => {
+                        match reply {
+                            None => {
+                                let maybe_reply_id =
+                                    sent_map_edited.lock().unwrap().get_mut(&unique_id).cloned();
+                                if let Some(reply_id) = maybe_reply_id {
                                     log::info!(
-                                        "Edited: {} New: {}",
-                                        update.text().unwrap_or("<empty>"),
-                                        text
+                                        "Edited: {} [Withdraw]",
+                                        update.text().unwrap_or("<empty>")
                                     );
-                                    upd.reply_to(text).entities(entities).send().await
+                                    bot.delete_message(reply_id.chat_id, reply_id.message_id)
+                                        .send()
+                                        .await
+                                        .log_on_error()
+                                        .await;
+                                    sent_map_edited.lock().unwrap().remove(&unique_id);
                                 }
-                                Some(reply_id) => {
-                                    log::info!(
-                                        "Edited: {} Update: {}",
-                                        update.text().unwrap_or("<empty>"),
-                                        text
-                                    );
-                                    bot.edit_message_text(
-                                        reply_id.chat_id,
-                                        reply_id.message_id,
-                                        text.clone(),
-                                    )
-                                    .entities(entities.clone())
-                                    .send()
-                                    .await
-                                }
-                            };
-
-                            if let Ok(sent_reply) = sent_reply {
-                                let mut sent_map = sent_map_edited.lock().unwrap();
-                                sent_map.insert(
-                                    MessageMeta::from_message(update),
-                                    MessageMeta::from_message(&sent_reply),
-                                );
-                                let mut rev_sent_map = rev_sent_map_edited.lock().unwrap();
-                                rev_sent_map.insert(
-                                    MessageMeta::from_message(&sent_reply),
-                                    MessageMeta::from_message(update),
-                                );
-                            } else {
-                                log::error!("Failed to reply/edit message.")
                             }
-                        }
-                    };
+                            Some(segments) => {
+                                let text = segments.text();
+                                let entities = segments.entities();
+
+                                let maybe_reply_id =
+                                    sent_map_edited.lock().unwrap().get_mut(&unique_id).cloned();
+                                let sent_reply = match maybe_reply_id {
+                                    None => {
+                                        log::info!(
+                                            "Edited: {} New: {}",
+                                            update.text().unwrap_or("<empty>"),
+                                            text
+                                        );
+                                        upd.reply_to(text).entities(entities).send().await
+                                    }
+                                    Some(reply_id) => {
+                                        log::info!(
+                                            "Edited: {} Update: {}",
+                                            update.text().unwrap_or("<empty>"),
+                                            text
+                                        );
+                                        bot.edit_message_text(
+                                            reply_id.chat_id,
+                                            reply_id.message_id,
+                                            text.clone(),
+                                        )
+                                        .entities(entities.clone())
+                                        .send()
+                                        .await
+                                    }
+                                };
+
+                                if let Ok(sent_reply) = sent_reply {
+                                    let mut sent_map = sent_map_edited.lock().unwrap();
+                                    sent_map.insert(
+                                        MessageMeta::from_message(update),
+                                        MessageMeta::from_message(&sent_reply),
+                                    );
+                                    let mut rev_sent_map = rev_sent_map_edited.lock().unwrap();
+                                    rev_sent_map.insert(
+                                        MessageMeta::from_message(&sent_reply),
+                                        MessageMeta::from_message(update),
+                                    );
+                                } else {
+                                    log::error!("Failed to reply/edit message.")
+                                }
+                            }
+                        };
+                    }
                 }
             })
         })

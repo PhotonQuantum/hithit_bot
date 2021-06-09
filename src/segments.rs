@@ -128,7 +128,8 @@ impl Segments {
             segments.push_back(Segment {
                 kind: kinds(&stack),
                 text: String::from_utf16_lossy(
-                    &text.encode_utf16()
+                    &text
+                        .encode_utf16()
                         .skip(offset)
                         .take(curr.end - offset)
                         .collect::<Vec<u16>>(),
