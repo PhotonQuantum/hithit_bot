@@ -11,12 +11,11 @@ lto = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pest = "2.0"
-pest_derive = "2.0"
+pest = "2.1.3"
+pest_derive = "2.1.0"
 log = "0.4"
 pretty_env_logger = "0.4"
 teloxide = { git = "https://github.com/PhotonQuantum/teloxide", branch = "feat-send-entities" }
-teloxide-macros = "0.3"
 tokio = { version = "0.2", features = ["rt-threaded", "macros"] }
 maplit = "1"
 thiserror = "1.0"

@@ -41,7 +41,7 @@ macro_rules! empty_segment {
         Segment {
             kind: HashSet::new(),
             text: String::from(" "),
-        };
+        }
     };
 }
 
