@@ -13,6 +13,7 @@ use const_format::concatcp;
 use lru_cache::LruCache;
 use teloxide::prelude::*;
 use teloxide::types::{MessageEntityKind, User};
+use tokio_stream::wrappers::UnboundedReceiverStream;
 
 use segments::{Segment, Segments};
 use ParseMode::*;
@@ -249,7 +250,7 @@ async fn run() {
     teloxide::enable_logging!();
     log::warn!("Starting hithit bot");
 
-    let bot = Bot::builder().build();
+    let bot = Bot::from_env().auto_send();
 
     let sent_map = Arc::new(Mutex::new(LruCache::new(8192)));
     let sent_map_new = sent_map.clone();
@@ -260,13 +261,13 @@ async fn run() {
     let rev_sent_map_edited = rev_sent_map.clone();
 
     Dispatcher::new(bot)
-        .messages_handler(move |rx: DispatcherHandlerRx<Message>| {
-            rx.for_each(move |upd| {
+        .messages_handler(move |rx: DispatcherHandlerRx<AutoSend<Bot>, Message>| {
+            UnboundedReceiverStream::new(rx).for_each_concurrent(None, move |upd| {
                 let sent_map_new = sent_map_new.clone();
                 let rev_sent_map_new = rev_sent_map_new.clone();
                 async move {
                     let update = &upd.update;
-                    let maybe_me = upd.bot.get_me().send().await;
+                    let maybe_me = upd.requester.get_me().await;
                     if let Ok(me) = maybe_me {
                         let me = &me.user;
                         let reply = process_ctx(me, &mut *rev_sent_map_new.lock().unwrap(), update)
@@ -285,7 +286,7 @@ async fn run() {
                                 let text = segments.text();
                                 let entities = segments.entities();
 
-                                let sent_reply = upd.answer(text).entities(entities).send().await;
+                                let sent_reply = upd.answer(text).entities(entities).await;
 
                                 if let Ok(sent_reply) = sent_reply {
                                     let mut sent_map = sent_map_new.lock().unwrap();
@@ -305,15 +306,15 @@ async fn run() {
                 }
             })
         })
-        .edited_messages_handler(move |rx: DispatcherHandlerRx<Message>| {
-            rx.for_each(move |upd| {
+        .edited_messages_handler(move |rx: DispatcherHandlerRx<AutoSend<Bot>, Message>| {
+            UnboundedReceiverStream::new(rx).for_each_concurrent(None, move |upd| {
                 let sent_map_edited = sent_map_edited.clone();
                 let rev_sent_map_edited = rev_sent_map_edited.clone();
                 async move {
-                    let bot = &upd.bot;
+                    let bot = &upd.requester;
                     let update = &upd.update;
                     let unique_id = MessageMeta::from_message(update);
-                    let maybe_me = upd.bot.get_me().send().await;
+                    let maybe_me = upd.requester.get_me().await;
                     if let Ok(me) = maybe_me {
                         let me = &me.user;
                         let reply =
@@ -338,7 +339,6 @@ async fn run() {
                                         update.text().unwrap_or("<empty>")
                                     );
                                     bot.delete_message(reply_id.chat_id, reply_id.message_id)
-                                        .send()
                                         .await
                                         .log_on_error()
                                         .await;
@@ -358,7 +358,7 @@ async fn run() {
                                             update.text().unwrap_or("<empty>"),
                                             text
                                         );
-                                        upd.reply_to(text).entities(entities).send().await
+                                        upd.reply_to(text).entities(entities).await
                                     }
                                     Some(reply_id) => {
                                         log::info!(
@@ -372,7 +372,6 @@ async fn run() {
                                             text.clone(),
                                         )
                                         .entities(entities.clone())
-                                        .send()
                                         .await
                                     }
                                 };
