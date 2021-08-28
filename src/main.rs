@@ -247,7 +247,7 @@ fn elaborate(update: &Message, reply: Result<Segments>) -> Segments {
 
 async fn run() {
     teloxide::enable_logging!();
-    log::info!("Starting hithit bot");
+    log::warn!("Starting hithit bot");
 
     let bot = Bot::builder().build();
 
@@ -284,11 +284,6 @@ async fn run() {
                             Some(segments) => {
                                 let text = segments.text();
                                 let entities = segments.entities();
-                                log::info!(
-                                    "Income: {} Reply: {}",
-                                    update.text().unwrap_or("<empty>"),
-                                    text
-                                );
 
                                 let sent_reply = upd.answer(text).entities(entities).send().await;
 
