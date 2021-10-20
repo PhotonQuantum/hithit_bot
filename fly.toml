@@ -1,0 +1,6 @@
+# fly.toml file generated for hithit-bot on 2021-10-21T02:25:23+08:00
+
+app = "hithit-bot"
+
+kill_signal = "SIGINT"
+kill_timeout = 5
