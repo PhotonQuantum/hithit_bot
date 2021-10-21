@@ -1,13 +1,11 @@
 use std::collections::HashSet;
 
-use anyhow::Result;
-
 use crate::formatter::HoleIdent;
 use crate::segments::{Segment, Segments};
 
 use super::{Formatter, Token};
 
-pub fn parse_naive(segments: &Segments) -> Result<Formatter> {
+pub fn parse(segments: &Segments) -> Formatter {
     let mut bypass = false;
 
     let mut data: Vec<Token> = segments
@@ -39,7 +37,7 @@ pub fn parse_naive(segments: &Segments) -> Result<Formatter> {
         })
         .collect();
 
-    Ok(if bypass {
+    if bypass {
         Formatter {
             data,
             indexed: 1,
@@ -51,8 +49,7 @@ pub fn parse_naive(segments: &Segments) -> Result<Formatter> {
                 if segments
                     .inner_ref()
                     .back()
-                    .map(|segment| segment.text.ends_with('了'))
-                    .unwrap_or(false)
+                    .map_or(false, |segment| segment.text.ends_with('了'))
                 {
                     " "
                 } else {
@@ -70,5 +67,5 @@ pub fn parse_naive(segments: &Segments) -> Result<Formatter> {
             indexed: 0,
             named: HashSet::new(),
         }
-    })
+    }
 }

@@ -12,7 +12,7 @@ pub struct Segment {
 
 impl Segment {
     pub fn from_user_with_name(user: &User, name: String) -> Self {
-        Segment {
+        Self {
             text: name,
             kind: hashset!(MessageEntityKind::TextMention { user: user.clone() }),
         }
@@ -52,12 +52,12 @@ pub struct Segments {
 
 impl From<VecDeque<Segment>> for Segments {
     fn from(data: VecDeque<Segment>) -> Self {
-        Segments { data }
+        Self { data }
     }
 }
 
 impl Segments {
-    pub fn inner_ref(&self) -> &VecDeque<Segment> {
+    pub const fn inner_ref(&self) -> &VecDeque<Segment> {
         &self.data
     }
 
@@ -65,7 +65,7 @@ impl Segments {
         &mut self.data
     }
 
-    pub fn build(text: &str, entities: &[MessageEntity]) -> Segments {
+    pub fn build(text: &str, entities: &[MessageEntity]) -> Self {
         let mut ranges: Vec<_> = entities
             .iter()
             .map(|entity| EntityRange {
@@ -139,7 +139,7 @@ impl Segments {
             stack.pop();
         }
 
-        Segments { data: segments }
+        Self { data: segments }
     }
 
     pub fn drain_head(mut self, length: usize) -> Option<Self> {
@@ -253,10 +253,9 @@ fn kinds(stack: &[EntityRange]) -> HashSet<MessageEntityKind> {
         .collect()
 }
 
-fn unwrap_bound<T>(bound: Bound<&T>) -> Option<&T> {
+const fn unwrap_bound<T>(bound: Bound<&T>) -> Option<&T> {
     match bound {
-        Bound::Included(v) => Some(v),
-        Bound::Excluded(v) => Some(v),
+        Bound::Included(v) | Bound::Excluded(v) => Some(v),
         Bound::Unbounded => None,
     }
 }

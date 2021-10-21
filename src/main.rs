@@ -1,3 +1,5 @@
+#![allow(clippy::non_ascii_literal)]
+
 #[macro_use]
 extern crate maplit;
 #[macro_use]
@@ -16,12 +18,9 @@ use teloxide::types::{MessageEntityKind, User};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 use segments::{Segment, Segments};
-use ParseMode::*;
-use ProcessError::*;
 
 use crate::formatter::{parse_curly, parse_naive};
 use crate::utils::add_exclaim_mark;
-use crate::ProcessError::NoneError;
 
 #[macro_use]
 mod segments;
@@ -31,6 +30,7 @@ mod utils;
 const EXPLAIN_COMMAND: &str = "/explain";
 const BOT_NAME: &str = "hithit_rs_bot";
 //noinspection RsTypeCheck
+#[allow(clippy::useless_transmute)]
 const EXPLAIN_COMMAND_EXTENDED: &str = concatcp!(EXPLAIN_COMMAND, "@", BOT_NAME);
 
 #[derive(Debug, Copy, Clone)]
@@ -48,7 +48,7 @@ struct MessageMeta {
 
 impl MessageMeta {
     pub fn from_message(msg: &Message) -> Self {
-        MessageMeta {
+        Self {
             chat_id: msg.chat.id,
             message_id: msg.id,
             sender: msg.from().unwrap().clone(),
@@ -57,6 +57,7 @@ impl MessageMeta {
 }
 
 #[tokio::main]
+#[allow(clippy::semicolon_if_nothing_returned)] // clippy bug?
 async fn main() {
     run().await;
 }
@@ -69,21 +70,20 @@ fn get_reply_user(
     if let Some(reply_msg) = message.reply_to_message() {
         let user = reply_msg.from()?;
         if user == bot_user {
-            let test = rev_sent_msg.get_mut(&MessageMeta::from_message(reply_msg));
-            test.map(|msg| {
-                let sender = &msg.sender;
-                message
-                    .from()
-                    .map(|curr_sender| {
-                        if sender == curr_sender {
-                            Segment::from_user_with_name(user, String::from("自己"))
-                        } else {
-                            sender.into()
-                        }
-                    })
-                    .unwrap_or_else(|| sender.into())
-            })
-            .unwrap_or_else(|| user.into())
+            let cached_msg = rev_sent_msg.get_mut(&MessageMeta::from_message(reply_msg));
+            cached_msg
+                .map_or_else(||user.into(), |msg| {
+                    let sender = &msg.sender;
+                    message
+                        .from()
+                        .map_or_else(||sender.into(), |curr_sender| {
+                            if sender == curr_sender {
+                                Segment::from_user_with_name(user, String::from("自己"))
+                            } else {
+                                sender.into()
+                            }
+                        })
+                })
         } else {
             user.into()
         }
@@ -140,22 +140,20 @@ fn process_ctx(
     }
     .map(|(segments, try_naive)| {
         parse_curly(&segments)
-            .map_err(SomeError)
+            .map_err(ProcessError::SomeError)
             .and_then(|fmt| {
                 if fmt.indexed_holes() > 0 || !fmt.named_holes().is_empty() {
-                    Ok((fmt, CurlyMode))
+                    Ok((fmt, ParseMode::CurlyMode))
                 } else if try_naive {
-                    parse_naive(&segments)
-                        .map(|x| (x, NaiveMode))
-                        .map_err(SomeError)
+                    Ok((parse_naive(&segments), ParseMode::NaiveMode))
                 } else {
-                    Err(NoneError)
+                    Err(ProcessError::NoneError)
                 }
             })
             .and_then(|(fmt, mode)| {
                 fmt.format(
                     &[sender.clone(), receiver.clone()],
-                    hashmap! {"sender" => sender.clone(),
+                    &hashmap! {"sender" => sender.clone(),
                     "receiver" => receiver.clone(),
                     "penetrator" => sender.clone(),  // suggested by @tonyxty
                     "self" => me.clone(),
@@ -164,17 +162,17 @@ fn process_ctx(
                     },
                 )
                 .map_err(anyhow::Error::from)
-                .map_err(SomeError)
+                .map_err(ProcessError::SomeError)
                 .map(Segments::trim)
                 .map(add_exclaim_mark)
                 .map(|mut segments| match mode {
-                    NaiveMode => {
+                    ParseMode::NaiveMode => {
                         let inner = segments.inner_mut();
                         inner.push_front(empty_segment!());
                         inner.push_front(sender);
                         segments
                     }
-                    CurlyMode => segments,
+                    ParseMode::CurlyMode => segments,
                 })
             })
     })
@@ -388,7 +386,7 @@ async fn run() {
                                         MessageMeta::from_message(update),
                                     );
                                 } else {
-                                    log::error!("Failed to reply/edit message.")
+                                    log::error!("Failed to reply/edit message.");
                                 }
                             }
                         };

@@ -5,13 +5,9 @@ use crate::segments::{Segment, Segments};
 const TERMINATION_MARKS: [char; 11] = ['。', '，', '！', '？', '；', '、', '.', ',', '!', '?', ';'];
 
 pub fn end_with_marks(input: &str) -> bool {
-    TERMINATION_MARKS.iter().any(|chr| {
-        input
-            .chars()
-            .last()
-            .map(|ref end| end == chr)
-            .unwrap_or(false)
-    })
+    TERMINATION_MARKS
+        .iter()
+        .any(|chr| input.chars().last().map_or(false, |ref end| end == chr))
 }
 
 pub fn add_exclaim_mark(mut input: Segments) -> Segments {

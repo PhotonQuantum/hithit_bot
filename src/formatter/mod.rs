@@ -3,9 +3,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use anyhow::Result;
 use teloxide::types::MessageEntityKind;
 
-pub use curly::parse_curly;
-pub use naive::parse_naive;
-use FormatError::*;
+pub use curly::parse as parse_curly;
+pub use naive::parse as parse_naive;
 
 use crate::segments::{Segment, Segments};
 
@@ -44,16 +43,16 @@ pub struct Formatter {
 }
 
 impl Formatter {
-    pub fn indexed_holes(&self) -> usize {
+    pub const fn indexed_holes(&self) -> usize {
         self.indexed
     }
-    pub fn named_holes(&self) -> &HashSet<String> {
+    pub const fn named_holes(&self) -> &HashSet<String> {
         &self.named
     }
     pub fn format(
         &self,
         indexed_args: &[Segment],
-        named_args: HashMap<&str, Segment>,
+        named_args: &HashMap<&str, Segment>,
     ) -> Result<Segments, FormatError> {
         let mut implicit_idx: usize = 0;
 
@@ -63,37 +62,34 @@ impl Formatter {
             .map(|token| match token {
                 Token::Segment(segment) => Ok(segment.clone()),
                 Token::Hole { kind, ident } => match ident {
-                    HoleIdent::Anonymous => {
-                        if let Some(value) = indexed_args.get(implicit_idx) {
+                    HoleIdent::Anonymous => indexed_args.get(implicit_idx).map_or(
+                        Err(FormatError::InvalidIndex(implicit_idx)),
+                        |value| {
                             implicit_idx += 1;
                             Ok(Segment {
                                 kind: kind.clone().union(&value.kind).cloned().collect(),
                                 text: value.text.clone(),
                             })
-                        } else {
-                            Err(InvalidIndex(implicit_idx))
-                        }
-                    }
-                    HoleIdent::Indexed(idx) => {
-                        if let Some(value) = indexed_args.get(*idx) {
+                        },
+                    ),
+                    HoleIdent::Indexed(idx) => indexed_args.get(*idx).map_or_else(
+                        || Err(FormatError::InvalidIndex(*idx)),
+                        |value| {
                             Ok(Segment {
                                 kind: kind.clone().union(&value.kind).cloned().collect(),
                                 text: value.text.clone(),
                             })
-                        } else {
-                            Err(InvalidIndex(*idx))
-                        }
-                    }
-                    HoleIdent::Named(name) => {
-                        if let Some(value) = named_args.get(name.as_str()) {
+                        },
+                    ),
+                    HoleIdent::Named(name) => named_args.get(name.as_str()).map_or_else(
+                        || Err(FormatError::InvalidKey(name.clone())),
+                        |value| {
                             Ok(Segment {
                                 kind: kind.clone().union(&value.kind).cloned().collect(),
                                 text: value.text.clone(),
                             })
-                        } else {
-                            Err(InvalidKey(name.clone()))
-                        }
-                    }
+                        },
+                    ),
                 },
             })
             .collect::<Result<VecDeque<_>, _>>()?

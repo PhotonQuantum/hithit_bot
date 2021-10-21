@@ -12,7 +12,7 @@ use super::{Formatter, HoleIdent, Token};
 #[grammar = "fmt.pest"]
 struct FmtParser;
 
-pub fn parse_curly(segments: &Segments) -> Result<Formatter> {
+pub fn parse(segments: &Segments) -> Result<Formatter> {
     let mut ast = vec![];
     let mut anonymous_counter = 0;
     let mut max_indexed = 0;
@@ -51,7 +51,7 @@ pub fn parse_curly(segments: &Segments) -> Result<Formatter> {
                                         HoleIdent::Named(ident.to_string())
                                     }
                                 },
-                            })
+                            });
                         }
                         Rule::char => buffer.push_str(pair.as_str()),
                         Rule::escaped => {
