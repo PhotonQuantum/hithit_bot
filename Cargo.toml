@@ -16,7 +16,7 @@ pest_derive = "2.1.0"
 log = "0.4"
 pretty_env_logger = "0.4"
 teloxide = {version="0.5.2", features=["auto-send"]}
-tokio = { version = "1.10", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1.12", features = ["rt", "rt-multi-thread", "macros"] }
 tokio-stream = "0.1"
 maplit = "1"
 thiserror = "1.0"
