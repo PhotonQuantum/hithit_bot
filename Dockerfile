@@ -22,4 +22,6 @@ RUN apt-get -y install ca-certificates
 
 COPY --from=builder ./work/target/release/hithit_bot ./
 
+EXPOSE 8080
+
 CMD ["./hithit_bot"]
