@@ -1,3 +1,5 @@
+use std::env;
+
 use teloxide::dispatching::update_listeners;
 use teloxide::prelude::*;
 
@@ -12,15 +14,19 @@ pub enum Listener {
 
 impl Listener {
     pub fn from_env() -> Self {
-        if let (Some(base), Some(path), Some(addr)) = (
-            option_env!("APP_WEBHOOK_URL"),
-            option_env!("APP_WEBHOOK_PATH"),
-            option_env!("APP_BIND_ADDR"),
+        if let (Ok(base), Ok(path), Ok(addr)) = (
+            env::var("APP_WEBHOOK_URL"),
+            env::var("APP_WEBHOOK_PATH"),
+            env::var("APP_BIND_ADDR"),
         ) {
             #[cfg(not(feature = "webhook"))]
             panic!("webhook support not enabled");
             #[cfg(feature = "webhook")]
-            Self::Webhook(webhook::HTTPConfig::new(base, path, addr))
+            Self::Webhook(webhook::HTTPConfig::new(
+                base.as_str(),
+                path.as_str(),
+                addr.as_str(),
+            ))
         } else {
             Self::Polling
         }
