@@ -2,7 +2,7 @@
 name = "hithit_bot"
 version = "0.1.0"
 authors = ["PhotonQuantum <self@lightquantum.me>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 
 [profile.release]
@@ -26,3 +26,4 @@ serde_json = "1"
 ranges = "0.3"
 const_format = "0.2"
 lru-cache = "0.1"
+parking_lot = "0.11"

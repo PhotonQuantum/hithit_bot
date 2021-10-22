@@ -1,6 +1,8 @@
+use std::borrow::Borrow;
 use std::collections::{Bound, HashMap, HashSet, VecDeque};
-use std::ops::RangeBounds;
+use std::ops::{Deref, DerefMut, RangeBounds};
 
+use maplit::hashset;
 use ranges::Ranges;
 use teloxide::types::{MessageEntity, MessageEntityKind, User};
 
@@ -11,38 +13,34 @@ pub struct Segment {
 }
 
 impl Segment {
-    pub fn from_user_with_name(user: &User, name: String) -> Self {
+    pub fn empty() -> Self {
         Self {
-            text: name,
-            kind: hashset!(MessageEntityKind::TextMention { user: user.clone() }),
+            kind: HashSet::new(),
+            text: String::from(" "),
         }
     }
-    pub fn from_user(user: &User) -> Self {
+    pub fn from_user_with_name(user: User, name: String) -> Self {
+        Self {
+            text: name,
+            kind: hashset!(MessageEntityKind::TextMention { user }),
+        }
+    }
+    pub fn from_user(user: User) -> Self {
         Self::from_user_with_name(
-            user,
+            user.clone(),
             if let Some(last_name) = &user.last_name {
                 format!("{} {}", user.first_name, last_name)
             } else {
-                user.first_name.clone()
+                user.first_name
             },
         )
     }
 }
 
-impl From<&User> for Segment {
-    fn from(user: &User) -> Self {
-        Self::from_user(user)
+impl<T: Borrow<User>> From<T> for Segment {
+    fn from(user: T) -> Self {
+        Self::from_user(user.borrow().clone())
     }
-}
-
-#[macro_export]
-macro_rules! empty_segment {
-    () => {
-        Segment {
-            kind: HashSet::new(),
-            text: String::from(" "),
-        }
-    };
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
@@ -50,22 +48,38 @@ pub struct Segments {
     data: VecDeque<Segment>,
 }
 
-impl From<VecDeque<Segment>> for Segments {
-    fn from(data: VecDeque<Segment>) -> Self {
+impl Segments {
+    pub fn new(data: VecDeque<Segment>) -> Self {
         Self { data }
     }
 }
 
-impl Segments {
-    pub const fn inner_ref(&self) -> &VecDeque<Segment> {
+impl<T: IntoIterator<Item = Segment>> From<T> for Segments {
+    fn from(data: T) -> Self {
+        Self {
+            data: data.into_iter().collect(),
+        }
+    }
+}
+
+impl Deref for Segments {
+    type Target = VecDeque<Segment>;
+
+    fn deref(&self) -> &Self::Target {
         &self.data
     }
+}
 
-    pub fn inner_mut(&mut self) -> &mut VecDeque<Segment> {
+impl DerefMut for Segments {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.data
     }
+}
 
+impl Segments {
     pub fn build(text: &str, entities: &[MessageEntity]) -> Self {
+        let text_utf16: Vec<_> = text.encode_utf16().collect();
+
         let mut ranges: Vec<_> = entities
             .iter()
             .map(|entity| EntityRange {
@@ -86,7 +100,7 @@ impl Segments {
         stack.push(EntityRange {
             kind: None,
             start: 0,
-            end: text.encode_utf16().count(),
+            end: text_utf16.len(),
         });
 
         while let Some(next) = ranges.last() {
@@ -95,13 +109,7 @@ impl Segments {
                 if offset < curr.end {
                     segments.push_back(Segment {
                         kind: kinds(&stack),
-                        text: String::from_utf16_lossy(
-                            &text
-                                .encode_utf16()
-                                .skip(offset)
-                                .take(curr.end - offset)
-                                .collect::<Vec<u16>>(),
-                        ),
+                        text: String::from_utf16_lossy(&text_utf16[offset..curr.end]),
                     });
                 }
                 offset = curr.end;
@@ -110,13 +118,7 @@ impl Segments {
                 if next.start > offset {
                     segments.push_back(Segment {
                         kind: kinds(&stack),
-                        text: String::from_utf16_lossy(
-                            &text
-                                .encode_utf16()
-                                .skip(offset)
-                                .take(next.start - offset)
-                                .collect::<Vec<u16>>(),
-                        ),
+                        text: String::from_utf16_lossy(&text_utf16[offset..next.start]),
                     });
                     offset = next.start;
                 }
@@ -127,13 +129,7 @@ impl Segments {
         while let Some(curr) = stack.last() {
             segments.push_back(Segment {
                 kind: kinds(&stack),
-                text: String::from_utf16_lossy(
-                    &text
-                        .encode_utf16()
-                        .skip(offset)
-                        .take(curr.end - offset)
-                        .collect::<Vec<u16>>(),
-                ),
+                text: String::from_utf16_lossy(&text_utf16[offset..curr.end]),
             });
             offset = curr.end;
             stack.pop();
@@ -169,8 +165,6 @@ impl Segments {
             let trimmed = front.text.trim_start().to_string();
             if trimmed.is_empty() {
                 self.data.pop_front();
-            } else if trimmed == front.text.as_str() {
-                break;
             } else {
                 front.text = trimmed;
                 break;
@@ -184,8 +178,6 @@ impl Segments {
             let trimmed = back.text.trim_end().to_string();
             if trimmed.is_empty() {
                 self.data.pop_back();
-            } else if trimmed == back.text.as_str() {
-                break;
             } else {
                 back.text = trimmed;
                 break;

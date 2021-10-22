@@ -1,398 +1,124 @@
 #![allow(clippy::non_ascii_literal)]
 
-#[macro_use]
-extern crate maplit;
-#[macro_use]
-extern crate pest_derive;
-#[macro_use]
-extern crate thiserror;
+use std::sync::Arc;
 
-use std::collections::{HashSet, VecDeque};
-use std::sync::{Arc, Mutex};
-
-use anyhow::Result;
 use const_format::concatcp;
-use lru_cache::LruCache;
+use parking_lot::Mutex;
 use teloxide::prelude::*;
-use teloxide::types::{MessageEntityKind, User};
+use teloxide::types::User;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use segments::{Segment, Segments};
+use crate::elaborator::{elaborate, elaborate_error};
+use crate::error::Error;
+use crate::memory::{MessageMeta, ReplyBooking};
 
-use crate::formatter::{parse_curly, parse_naive};
-use crate::utils::add_exclaim_mark;
+mod elaborator;
+mod error;
+mod formatter;
+mod memory;
+mod parser;
+mod process;
+mod segments;
 
 #[macro_use]
-mod segments;
-mod formatter;
 mod utils;
 
 const EXPLAIN_COMMAND: &str = "/explain";
 const BOT_NAME: &str = "hithit_rs_bot";
 //noinspection RsTypeCheck
-#[allow(clippy::useless_transmute)]
+#[allow(clippy::useless_transmute, clippy::semicolon_if_nothing_returned)]
 const EXPLAIN_COMMAND_EXTENDED: &str = concatcp!(EXPLAIN_COMMAND, "@", BOT_NAME);
 
-#[derive(Debug, Copy, Clone)]
-enum ParseMode {
-    NaiveMode,
-    CurlyMode,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-struct MessageMeta {
-    chat_id: i64,
-    message_id: i32,
-    sender: User,
-}
-
-impl MessageMeta {
-    pub fn from_message(msg: &Message) -> Self {
-        Self {
-            chat_id: msg.chat.id,
-            message_id: msg.id,
-            sender: msg.from().unwrap().clone(),
-        }
-    }
-}
-
-#[tokio::main]
 #[allow(clippy::semicolon_if_nothing_returned)] // clippy bug?
+#[tokio::main]
 async fn main() {
-    run().await;
-}
-
-fn get_reply_user(
-    bot_user: &User,
-    rev_sent_msg: &mut LruCache<MessageMeta, MessageMeta>,
-    message: &Message,
-) -> Option<Segment> {
-    if let Some(reply_msg) = message.reply_to_message() {
-        let user = reply_msg.from()?;
-        if user == bot_user {
-            let cached_msg = rev_sent_msg.get_mut(&MessageMeta::from_message(reply_msg));
-            cached_msg
-                .map_or_else(||user.into(), |msg| {
-                    let sender = &msg.sender;
-                    message
-                        .from()
-                        .map_or_else(||sender.into(), |curr_sender| {
-                            if sender == curr_sender {
-                                Segment::from_user_with_name(user, String::from("自己"))
-                            } else {
-                                sender.into()
-                            }
-                        })
-                })
-        } else {
-            user.into()
-        }
-    } else {
-        let user = message.from()?;
-        Segment::from_user_with_name(user, String::from("自己"))
-    }
-    .into()
-}
-
-#[derive(Debug)]
-enum ProcessError {
-    NoneError,
-    SomeError(anyhow::Error),
-}
-
-fn process_ctx(
-    bot_user: &User,
-    rev_sent_msg: &mut LruCache<MessageMeta, MessageMeta>,
-    msg: &Message,
-) -> Option<Result<Segments>> {
-    let text = msg.text()?;
-    let entities = msg.entities()?;
-    let sender = Segment::from_user(msg.from()?);
-    let me = Segment::from_user_with_name(msg.from()?, String::from("自己"));
-    let receiver = get_reply_user(bot_user, rev_sent_msg, msg)?;
-
-    if !text.starts_with('/') {
-        None
-    } else if text.starts_with(EXPLAIN_COMMAND_EXTENDED) {
-        Segments::build(text, entities)
-            .drain_head(EXPLAIN_COMMAND_EXTENDED.len() + 1)
-            .map(|segments| (segments, true))
-    } else if text.starts_with(EXPLAIN_COMMAND) {
-        Segments::build(text, entities)
-            .drain_head(EXPLAIN_COMMAND.len() + 1)
-            .map(|segments| (segments, true))
-    } else {
-        text.chars().nth(1).and_then(|chr| {
-            if chr.len_utf8() > 1 {
-                Segments::build(text, entities)
-                    .drain_head(1)
-                    .map(|x| (x, true))
-            } else if chr == '^' {
-                Segments::build(text, entities)
-                    .drain_head(2)
-                    .map(|x| (x, true))
-            } else {
-                Segments::build(text, entities)
-                    .drain_head(1)
-                    .map(|x| (x, false))
-            }
-        })
-    }
-    .map(|(segments, try_naive)| {
-        parse_curly(&segments)
-            .map_err(ProcessError::SomeError)
-            .and_then(|fmt| {
-                if fmt.indexed_holes() > 0 || !fmt.named_holes().is_empty() {
-                    Ok((fmt, ParseMode::CurlyMode))
-                } else if try_naive {
-                    Ok((parse_naive(&segments), ParseMode::NaiveMode))
-                } else {
-                    Err(ProcessError::NoneError)
-                }
-            })
-            .and_then(|(fmt, mode)| {
-                fmt.format(
-                    &[sender.clone(), receiver.clone()],
-                    &hashmap! {"sender" => sender.clone(),
-                    "receiver" => receiver.clone(),
-                    "penetrator" => sender.clone(),  // suggested by @tonyxty
-                    "self" => me.clone(),
-                    "me" => me.clone(),
-                    "this" => me.clone()
-                    },
-                )
-                .map_err(anyhow::Error::from)
-                .map_err(ProcessError::SomeError)
-                .map(Segments::trim)
-                .map(add_exclaim_mark)
-                .map(|mut segments| match mode {
-                    ParseMode::NaiveMode => {
-                        let inner = segments.inner_mut();
-                        inner.push_front(empty_segment!());
-                        inner.push_front(sender);
-                        segments
-                    }
-                    ParseMode::CurlyMode => segments,
-                })
-            })
-    })
-    .and_then(|maybe_segments| match maybe_segments {
-        Ok(segments) => Some(Ok(segments)),
-        Err(ProcessError::NoneError) => None,
-        Err(ProcessError::SomeError(err)) => Some(Err(err)),
-    })
-}
-
-fn error_report<T: Into<anyhow::Error>>(err: T) -> VecDeque<Segment> {
-    let mut deque = VecDeque::new();
-    deque.push_back(Segment {
-        text: String::from("An error occurred while processing your template.\n"),
-        kind: hashset!(MessageEntityKind::Bold),
-    });
-    deque.push_back(Segment {
-        text: err.into().to_string(),
-        kind: hashset!(MessageEntityKind::Code),
-    });
-    deque
-}
-
-fn elaborate(update: &Message, reply: Result<Segments>) -> Segments {
-    let text = update.text().unwrap();
-    let entities = update.entities().unwrap();
-    let orig_segments = Segments::build(text, entities);
-    let mut deque = VecDeque::new();
-    deque.push_back(Segment {
-        kind: hashset! {MessageEntityKind::Bold},
-        text: String::from("Input:\n"),
-    });
-    deque.push_back(Segment {
-        kind: hashset! {MessageEntityKind::Code},
-        text: format!("{}\n{:#?}\n", text, entities),
-    });
-    deque.push_back(Segment {
-        kind: hashset! {MessageEntityKind::Bold},
-        text: String::from("Parsed:\n"),
-    });
-    deque.push_back(Segment {
-        kind: hashset! {MessageEntityKind::Code},
-        text: format!("{:#?}\n", orig_segments),
-    });
-    match reply {
-        Ok(segments) => {
-            deque.push_back(Segment {
-                kind: hashset! {MessageEntityKind::Bold},
-                text: String::from("Rendered:\n"),
-            });
-            deque.push_back(Segment {
-                kind: hashset! {MessageEntityKind::Code},
-                text: format!("{:#?}\n", segments),
-            });
-            deque.push_back(Segment {
-                kind: hashset! {MessageEntityKind::Bold},
-                text: String::from("Output:\n"),
-            });
-            deque.push_back(Segment {
-                kind: hashset! {MessageEntityKind::Code},
-                text: format!("{}\n{:#?}", segments.text(), segments.entities()),
-            });
-            Segments::from(deque)
-        }
-        Err(err) => {
-            deque.extend(error_report(err));
-            Segments::from(deque)
-        }
-    }
-}
-
-async fn run() {
     teloxide::enable_logging!();
     log::warn!("Starting hithit bot");
 
     let bot = Bot::from_env().auto_send();
 
-    let sent_map = Arc::new(Mutex::new(LruCache::new(8192)));
-    let sent_map_new = sent_map.clone();
-    let sent_map_edited = sent_map.clone();
-
-    let rev_sent_map = Arc::new(Mutex::new(LruCache::new(8192)));
-    let rev_sent_map_new = rev_sent_map.clone();
-    let rev_sent_map_edited = rev_sent_map.clone();
+    let booking = Arc::new(Mutex::new(ReplyBooking::with_capacity(8192)));
 
     Dispatcher::new(bot)
-        .messages_handler(move |rx: DispatcherHandlerRx<AutoSend<Bot>, Message>| {
-            UnboundedReceiverStream::new(rx).for_each_concurrent(None, move |upd| {
-                let sent_map_new = sent_map_new.clone();
-                let rev_sent_map_new = rev_sent_map_new.clone();
-                async move {
-                    let update = &upd.update;
-                    let maybe_me = upd.requester.get_me().await;
-                    if let Ok(me) = maybe_me {
-                        let me = &me.user;
-                        let reply = process_ctx(me, &mut *rev_sent_map_new.lock().unwrap(), update)
-                            .map(|reply| {
-                                let text = update.text().unwrap();
-                                if text.starts_with(EXPLAIN_COMMAND) {
-                                    elaborate(update, reply)
-                                } else {
-                                    reply.unwrap_or_else(|err| error_report(err).into())
-                                }
-                            });
+        .messages_handler({
+            let booking = booking.clone();
+            move |rx: DispatcherHandlerRx<AutoSend<Bot>, Message>| {
+                UnboundedReceiverStream::new(rx).for_each_concurrent(None, move |upd| {
+                    let booking = booking.clone();
+                    async move {
+                        let update = &upd.update;
+                        let me: &User = &bail!(unwrap upd.requester.get_me().await, Err(_)).user;
+                        let output = bail!(
+                            process::process(me, booking.lock(), update),
+                            Err(Error::ShouldNotHandle)
+                        );
 
-                        match reply {
-                            None => {}
-                            Some(segments) => {
-                                let text = segments.text();
-                                let entities = segments.entities();
+                        let reply = if update.text().unwrap().starts_with(EXPLAIN_COMMAND) {
+                            elaborate(update, output)
+                        } else {
+                            output.unwrap_or_else(|e| elaborate_error(e).into())
+                        };
 
-                                let sent_reply = upd.answer(text).entities(entities).await;
+                        let sent_reply = upd.answer(reply.text()).entities(reply.entities()).await;
 
-                                if let Ok(sent_reply) = sent_reply {
-                                    let mut sent_map = sent_map_new.lock().unwrap();
-                                    sent_map.insert(
-                                        MessageMeta::from_message(update),
-                                        MessageMeta::from_message(&sent_reply),
-                                    );
-                                    let mut rev_sent_map = rev_sent_map_new.lock().unwrap();
-                                    rev_sent_map.insert(
-                                        MessageMeta::from_message(&sent_reply),
-                                        MessageMeta::from_message(update),
-                                    );
-                                }
-                            }
+                        if let Ok(sent_reply) = sent_reply {
+                            booking.lock().book(update.into(), sent_reply.into());
                         };
                     }
-                }
-            })
+                })
+            }
         })
-        .edited_messages_handler(move |rx: DispatcherHandlerRx<AutoSend<Bot>, Message>| {
-            UnboundedReceiverStream::new(rx).for_each_concurrent(None, move |upd| {
-                let sent_map_edited = sent_map_edited.clone();
-                let rev_sent_map_edited = rev_sent_map_edited.clone();
-                async move {
-                    let bot = &upd.requester;
-                    let update = &upd.update;
-                    let unique_id = MessageMeta::from_message(update);
-                    let maybe_me = upd.requester.get_me().await;
-                    if let Ok(me) = maybe_me {
-                        let me = &me.user;
-                        let reply =
-                            process_ctx(me, &mut *rev_sent_map_edited.lock().unwrap(), update).map(
-                                |reply| {
-                                    let text = update.text().unwrap();
-                                    if text.starts_with(EXPLAIN_COMMAND) {
-                                        elaborate(update, reply)
-                                    } else {
-                                        reply.unwrap_or_else(|err| error_report(err).into())
-                                    }
-                                },
-                            );
+        .edited_messages_handler({
+            let booking = booking.clone();
+            move |rx: DispatcherHandlerRx<AutoSend<Bot>, Message>| {
+                UnboundedReceiverStream::new(rx).for_each_concurrent(None, move |upd| {
+                    let booking = booking.clone();
+                    async move {
+                        let bot = &upd.requester;
+                        let update = &upd.update;
+                        let unique_id = MessageMeta::from(update);
 
-                        match reply {
-                            None => {
-                                let maybe_reply_id =
-                                    sent_map_edited.lock().unwrap().get_mut(&unique_id).cloned();
-                                if let Some(reply_id) = maybe_reply_id {
-                                    log::info!(
-                                        "Edited: {} [Withdraw]",
-                                        update.text().unwrap_or("<empty>")
-                                    );
-                                    bot.delete_message(reply_id.chat_id, reply_id.message_id)
-                                        .await
-                                        .log_on_error()
-                                        .await;
-                                    sent_map_edited.lock().unwrap().remove(&unique_id);
-                                }
+                        let me: &User = &bail!(unwrap upd.requester.get_me().await, Err(_)).user;
+                        let output = process::process(me, booking.lock(), update);
+
+                        if let Err(Error::ShouldNotHandle) = output {
+                            // this is no longer a valid msg, delete previous reply
+                            let reply_id = booking.lock().forward_lookup(&unique_id).cloned();
+                            if let Some(reply_id) = reply_id {
+                                bot.delete_message(reply_id.chat_id, reply_id.message_id)
+                                    .await
+                                    .log_on_error()
+                                    .await;
+                                booking.lock().forget(&unique_id);
                             }
-                            Some(segments) => {
-                                let text = segments.text();
-                                let entities = segments.entities();
+                            return;
+                        }
 
-                                let maybe_reply_id =
-                                    sent_map_edited.lock().unwrap().get_mut(&unique_id).cloned();
-                                let sent_reply = match maybe_reply_id {
-                                    None => {
-                                        log::info!(
-                                            "Edited: {} New: {}",
-                                            update.text().unwrap_or("<empty>"),
-                                            text
-                                        );
-                                        upd.reply_to(text).entities(entities).await
-                                    }
-                                    Some(reply_id) => {
-                                        log::info!(
-                                            "Edited: {} Update: {}",
-                                            update.text().unwrap_or("<empty>"),
-                                            text
-                                        );
-                                        bot.edit_message_text(
-                                            reply_id.chat_id,
-                                            reply_id.message_id,
-                                            text.clone(),
-                                        )
-                                        .entities(entities.clone())
-                                        .await
-                                    }
-                                };
+                        let reply = if update.text().unwrap().starts_with(EXPLAIN_COMMAND) {
+                            elaborate(update, output)
+                        } else {
+                            output.unwrap_or_else(|e| elaborate_error(e).into())
+                        };
 
-                                if let Ok(sent_reply) = sent_reply {
-                                    let mut sent_map = sent_map_edited.lock().unwrap();
-                                    sent_map.insert(
-                                        MessageMeta::from_message(update),
-                                        MessageMeta::from_message(&sent_reply),
-                                    );
-                                    let mut rev_sent_map = rev_sent_map_edited.lock().unwrap();
-                                    rev_sent_map.insert(
-                                        MessageMeta::from_message(&sent_reply),
-                                        MessageMeta::from_message(update),
-                                    );
-                                } else {
-                                    log::error!("Failed to reply/edit message.");
-                                }
-                            }
+                        let reply_id = booking.lock().forward_lookup(&unique_id).cloned();
+                        let sent_reply = if let Some(reply_id) = reply_id {
+                            bot.edit_message_text(
+                                reply_id.chat_id,
+                                reply_id.message_id,
+                                reply.text(),
+                            )
+                            .entities(reply.entities())
+                            .await
+                        } else {
+                            upd.reply_to(reply.text()).entities(reply.entities()).await
+                        };
+
+                        if let Ok(sent_reply) = sent_reply {
+                            booking.lock().book(update.into(), sent_reply.into());
                         };
                     }
-                }
-            })
+                })
+            }
         })
         .dispatch()
         .await;

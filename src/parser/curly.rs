@@ -1,30 +1,31 @@
 use std::cmp::max;
 use std::collections::HashSet;
 
-use anyhow::Result;
 use pest::Parser;
+use pest_derive::Parser;
 
+use crate::formatter::{Formatter, HoleIdent, Token};
 use crate::segments::{Segment, Segments};
 
-use super::{Formatter, HoleIdent, Token};
+pub type Error = pest::error::Error<Rule>;
 
 #[derive(Parser)]
 #[grammar = "fmt.pest"]
 struct FmtParser;
 
-pub fn parse(segments: &Segments) -> Result<Formatter> {
+pub fn parse(segments: &Segments) -> Result<Formatter, Error> {
     let mut ast = vec![];
     let mut anonymous_counter = 0;
     let mut max_indexed = 0;
     let mut named: HashSet<String> = HashSet::new();
 
-    for segment in segments.inner_ref() {
+    for segment in &**segments {
         let mut pairs = FmtParser::parse(Rule::formatter, &segment.text)?;
         let pair = pairs.next().unwrap();
 
         match pair.as_rule() {
             Rule::formatter => {
-                let mut buffer: String = String::new();
+                let mut buffer = String::new();
 
                 let pairs = pair.into_inner();
                 for pair in pairs {

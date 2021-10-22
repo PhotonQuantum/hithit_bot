@@ -20,7 +20,7 @@ key blabla not found
 index 1 not found
 : /explain
 Input:
-Segments {
+segments {
     data: [
         Segment {
             kind: {
