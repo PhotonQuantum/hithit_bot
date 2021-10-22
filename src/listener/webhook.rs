@@ -1,7 +1,8 @@
 use std::net::SocketAddr;
 use std::str::FromStr;
 
-use axum::handler::get;
+use axum::handler::{get, post};
+use axum::http::StatusCode;
 use axum::{Json, Router};
 use serde_json::Value;
 use teloxide::dispatching::stop_token::AsyncStopToken;
@@ -61,13 +62,15 @@ pub async fn listener(
 
     let (tx, rx) = unbounded_channel();
 
-    let app = Router::new().route(
-        config.path.as_str(),
-        get(move |Json(payload): Json<Value>| async move {
-            tx.send(Update::try_parse(&payload))
-                .expect("unable to send update to dispatcher");
-        }),
-    );
+    let app = Router::new()
+        .route(
+            config.path.as_str(),
+            post(move |Json(payload): Json<Value>| async move {
+                tx.send(Update::try_parse(&payload))
+                    .expect("unable to send update to dispatcher");
+            }),
+        )
+        .route("/health-check", get(|| async { StatusCode::OK }));
 
     let (stop_tx, stop_rx) = AsyncStopToken::new_pair();
 
