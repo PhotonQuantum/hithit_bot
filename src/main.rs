@@ -5,23 +5,22 @@ use std::sync::Arc;
 use const_format::concatcp;
 use parking_lot::Mutex;
 use teloxide::prelude::*;
-use teloxide::types::User;
-use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use crate::elaborator::{elaborate, elaborate_error};
-use crate::error::Error;
-use crate::memory::{MessageMeta, ReplyBooking};
+use crate::listener::Listener;
+use crate::memory::ReplyBooking;
 
+#[macro_use]
+mod utils;
+
+mod dispatcher;
 mod elaborator;
 mod error;
 mod formatter;
+mod listener;
 mod memory;
 mod parser;
 mod process;
 mod segments;
-
-#[macro_use]
-mod utils;
 
 const EXPLAIN_COMMAND: &str = "/explain";
 const BOT_NAME: &str = "hithit_rs_bot";
@@ -29,7 +28,6 @@ const BOT_NAME: &str = "hithit_rs_bot";
 #[allow(clippy::useless_transmute, clippy::semicolon_if_nothing_returned)]
 const EXPLAIN_COMMAND_EXTENDED: &str = concatcp!(EXPLAIN_COMMAND, "@", BOT_NAME);
 
-#[allow(clippy::semicolon_if_nothing_returned)] // clippy bug?
 #[tokio::main]
 async fn main() {
     teloxide::enable_logging!();
@@ -39,87 +37,8 @@ async fn main() {
 
     let booking = Arc::new(Mutex::new(ReplyBooking::with_capacity(8192)));
 
-    Dispatcher::new(bot)
-        .messages_handler({
-            let booking = booking.clone();
-            move |rx: DispatcherHandlerRx<AutoSend<Bot>, Message>| {
-                UnboundedReceiverStream::new(rx).for_each_concurrent(None, move |upd| {
-                    let booking = booking.clone();
-                    async move {
-                        let update = &upd.update;
-                        let me: &User = &bail!(unwrap upd.requester.get_me().await, Err(_)).user;
-                        let output = bail!(
-                            process::process(me, booking.lock(), update),
-                            Err(Error::ShouldNotHandle)
-                        );
+    let listener = Listener::from_env();
+    let dispatcher = dispatcher::dispatcher(bot.clone(), booking);
 
-                        let reply = if update.text().unwrap().starts_with(EXPLAIN_COMMAND) {
-                            elaborate(update, output)
-                        } else {
-                            output.unwrap_or_else(|e| elaborate_error(e).into())
-                        };
-
-                        let sent_reply = upd.answer(reply.text()).entities(reply.entities()).await;
-
-                        if let Ok(sent_reply) = sent_reply {
-                            booking.lock().book(update.into(), sent_reply.into());
-                        };
-                    }
-                })
-            }
-        })
-        .edited_messages_handler({
-            let booking = booking.clone();
-            move |rx: DispatcherHandlerRx<AutoSend<Bot>, Message>| {
-                UnboundedReceiverStream::new(rx).for_each_concurrent(None, move |upd| {
-                    let booking = booking.clone();
-                    async move {
-                        let bot = &upd.requester;
-                        let update = &upd.update;
-                        let unique_id = MessageMeta::from(update);
-
-                        let me: &User = &bail!(unwrap upd.requester.get_me().await, Err(_)).user;
-                        let output = process::process(me, booking.lock(), update);
-
-                        if let Err(Error::ShouldNotHandle) = output {
-                            // this is no longer a valid msg, delete previous reply
-                            let reply_id = booking.lock().forward_lookup(&unique_id).cloned();
-                            if let Some(reply_id) = reply_id {
-                                bot.delete_message(reply_id.chat_id, reply_id.message_id)
-                                    .await
-                                    .log_on_error()
-                                    .await;
-                                booking.lock().forget(&unique_id);
-                            }
-                            return;
-                        }
-
-                        let reply = if update.text().unwrap().starts_with(EXPLAIN_COMMAND) {
-                            elaborate(update, output)
-                        } else {
-                            output.unwrap_or_else(|e| elaborate_error(e).into())
-                        };
-
-                        let reply_id = booking.lock().forward_lookup(&unique_id).cloned();
-                        let sent_reply = if let Some(reply_id) = reply_id {
-                            bot.edit_message_text(
-                                reply_id.chat_id,
-                                reply_id.message_id,
-                                reply.text(),
-                            )
-                            .entities(reply.entities())
-                            .await
-                        } else {
-                            upd.reply_to(reply.text()).entities(reply.entities()).await
-                        };
-
-                        if let Ok(sent_reply) = sent_reply {
-                            booking.lock().book(update.into(), sent_reply.into());
-                        };
-                    }
-                })
-            }
-        })
-        .dispatch()
-        .await;
+    listener.dispatch_with_me(dispatcher, bot).await;
 }
