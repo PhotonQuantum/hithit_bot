@@ -38,7 +38,7 @@ async fn main() {
     let booking = Arc::new(Mutex::new(ReplyBooking::with_capacity(8192)));
 
     let listener = Listener::from_env();
-    let dispatcher = dispatcher::dispatcher(bot.clone(), booking);
+    let dispatcher = dispatcher::dispatcher(bot.clone(), booking).setup_ctrlc_handler();
 
     listener.dispatch_with_me(dispatcher, bot).await;
 }
