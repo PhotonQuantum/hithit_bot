@@ -5,9 +5,6 @@ authors = ["PhotonQuantum <self@lightquantum.me>"]
 edition = "2021"
 license = "MIT"
 
-[profile.release]
-lto = true
-
 [features]
 default = ["webhook"]
 webhook = ["axum", "url"]
