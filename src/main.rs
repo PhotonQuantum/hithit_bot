@@ -5,8 +5,8 @@ use std::sync::Arc;
 use const_format::concatcp;
 use parking_lot::Mutex;
 use teloxide::prelude::*;
+use teloxide_listener::Listener;
 
-use crate::listener::Listener;
 use crate::memory::ReplyBooking;
 
 #[macro_use]
@@ -16,7 +16,6 @@ mod dispatcher;
 mod elaborator;
 mod error;
 mod formatter;
-mod listener;
 mod memory;
 mod parser;
 mod process;
@@ -37,8 +36,11 @@ async fn main() {
 
     let booking = Arc::new(Mutex::new(ReplyBooking::with_capacity(8192)));
 
-    let listener = Listener::from_env();
-    let dispatcher = dispatcher::dispatcher(bot.clone(), booking).setup_ctrlc_handler();
+    let listener = Listener::from_env().build(bot.clone()).await;
+    let error_handler = LoggingErrorHandler::with_custom_text("An error from the update listener");
+    let mut dispatcher = dispatcher::dispatcher(bot, booking).setup_ctrlc_handler();
 
-    listener.dispatch_with_me(dispatcher, bot).await;
+    dispatcher
+        .dispatch_with_listener(listener, error_handler)
+        .await;
 }

@@ -523,7 +523,6 @@ dependencies = [
 name = "hithit_bot"
 version = "0.1.0"
 dependencies = [
- "axum",
  "const_format",
  "log",
  "lru-cache",
@@ -536,10 +535,10 @@ dependencies = [
  "serde",
  "serde_json",
  "teloxide",
+ "teloxide-listener",
  "thiserror",
  "tokio",
  "tokio-stream",
- "url",
 ]
 
 [[package]]
@@ -1464,6 +1463,20 @@ dependencies = [
  "tokio-util",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "teloxide-listener"
+version = "0.1.0"
+source = "git+https://github.com/PhotonQuantum/teloxide-listener#f46af63e79784dc85f8fa7e2768d8d068d3bb376"
+dependencies = [
+ "axum",
+ "futures-core",
+ "serde_json",
+ "teloxide",
+ "tokio",
+ "tokio-stream",
+ "url",
 ]
 
 [[package]]
