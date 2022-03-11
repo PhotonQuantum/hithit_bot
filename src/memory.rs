@@ -11,11 +11,26 @@ pub struct MessageMeta {
     pub sender: User,
 }
 
-#[allow(clippy::fallible_impl_from)] // I'm lazy ;)
-impl<T: Borrow<Message>> TryFrom<T> for MessageMeta {
+impl TryFrom<Message> for MessageMeta {
     type Error = Report;
 
-    fn try_from(msg: T) -> Result<Self, Self::Error> {
+    fn try_from(msg: Message) -> Result<Self, Self::Error> {
+        let msg = msg.borrow();
+        Ok(Self {
+            chat_id: msg.chat.id,
+            message_id: msg.id,
+            sender: msg
+                .from()
+                .wrap_err("failed to get sender from message")?
+                .clone(),
+        })
+    }
+}
+
+impl TryFrom<&Message> for MessageMeta {
+    type Error = Report;
+
+    fn try_from(msg: &Message) -> Result<Self, Self::Error> {
         let msg = msg.borrow();
         Ok(Self {
             chat_id: msg.chat.id,

@@ -63,7 +63,7 @@ fn get_reply_user(
     Some(if let Some(reply_msg) = message.reply_to_message() {
         let user = reply_msg.from()?;
         if user == bot_user {
-            let cached_msg = booking.reverse_lookup(&reply_msg.into());
+            let cached_msg = booking.reverse_lookup(&reply_msg.try_into().ok()?);
             cached_msg.map_or_else(
                 || user.into(),
                 |msg| {
