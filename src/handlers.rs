@@ -18,7 +18,7 @@ pub async fn message_handler(
     bot: AutoSend<Bot>,
     booking: Arc<Mutex<ReplyBooking>>,
 ) -> Result<()> {
-    let me = &bot.get_me().await?.user;
+    let me = &sentry_capture(bot.get_me().await)?.user;
     let output = process(me, booking.lock(), &msg).lift_should_not_handle()?;
 
     let reply = if msg
@@ -31,14 +31,18 @@ pub async fn message_handler(
         output.unwrap_or_else(|e| elaborate_error(e).into())
     };
 
-    let sent_reply = bot
-        .send_message(msg.chat.id, reply.text())
-        .entities(reply.entities())
-        .reply_to_message_id(msg.id)
-        .await
-        .wrap_err("Cannot send reply message")?;
+    let sent_reply = sentry_capture(
+        bot.send_message(msg.chat.id, reply.text())
+            .entities(reply.entities())
+            .reply_to_message_id(msg.id)
+            .await
+            .wrap_err("Cannot send reply message"),
+    )?;
 
-    booking.lock().book(msg.try_into()?, sent_reply.try_into()?);
+    booking.lock().book(
+        sentry_capture(msg.try_into())?,
+        sentry_capture(sent_reply.try_into())?,
+    );
 
     Ok(())
 }

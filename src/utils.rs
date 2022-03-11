@@ -11,7 +11,7 @@ where
         Ok(r) => Ok(r),
         Err(e) => {
             let report = e.into();
-            tracing::error!(sentry_event = Empty, "{:?}", report);
+            tracing::error!(sentry_ignore = Empty, "{:?}", report);
             if let Some(event) = event_from_report(&report) {
                 sentry::capture_event(event);
             }
