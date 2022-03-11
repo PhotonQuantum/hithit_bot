@@ -1,5 +1,5 @@
 use parking_lot::MutexGuard;
-use teloxide::prelude::*;
+use teloxide::prelude2::*;
 use teloxide::types::User;
 
 use crate::error::{Error, Result};

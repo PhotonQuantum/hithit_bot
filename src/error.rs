@@ -14,8 +14,30 @@ pub enum Format {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("this messaage is not intended to be handled by this bot")]
+    #[error("this message is not intended to be handled by this bot")]
     ShouldNotHandle,
+    #[error("format error: {0}")]
+    Format(#[from] Format),
+    #[error("parse error: {0}")]
+    Parse(#[from] Parse),
+}
+
+pub trait ErrorExt<T> {
+    fn lift_should_not_handle(self) -> Result<T, Error>;
+}
+
+impl<T> ErrorExt<Self> for Result<T, Error> {
+    fn lift_should_not_handle(self) -> Result<Self, Error> {
+        match self {
+            Ok(t) => Ok(Ok(t)),
+            Err(Error::ShouldNotHandle) => Err(Error::ShouldNotHandle),
+            Err(e) => Ok(Err(e)),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ExportedError {
     #[error("format error: {0}")]
     Format(#[from] Format),
     #[error("parse error: {0}")]
