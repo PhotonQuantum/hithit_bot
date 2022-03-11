@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use eyre::{ContextCompat, Report};
 use lru_cache::LruCache;
 use teloxide::types::{Message, User};
 
@@ -11,14 +12,19 @@ pub struct MessageMeta {
 }
 
 #[allow(clippy::fallible_impl_from)] // I'm lazy ;)
-impl<T: Borrow<Message>> From<T> for MessageMeta {
-    fn from(msg: T) -> Self {
+impl<T: Borrow<Message>> TryFrom<T> for MessageMeta {
+    type Error = Report;
+
+    fn try_from(msg: T) -> Result<Self, Self::Error> {
         let msg = msg.borrow();
-        Self {
+        Ok(Self {
             chat_id: msg.chat.id,
             message_id: msg.id,
-            sender: msg.from().unwrap().clone(),
-        }
+            sender: msg
+                .from()
+                .wrap_err("failed to get sender from message")?
+                .clone(),
+        })
     }
 }
 

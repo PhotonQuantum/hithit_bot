@@ -66,8 +66,8 @@ fn elaborate_output(segments: &Segments) -> impl IntoIterator<Item = Segment> {
 }
 
 pub fn elaborate(update: &Message, output: Result<Segments>) -> Segments {
-    let text = update.text().unwrap();
-    let entities = update.entities().unwrap();
+    let text = update.text().expect("must be text message");
+    let entities = update.entities().expect("must be text message");
     let input = Segments::build(text, entities);
 
     let elaborated_input = elaborate_input(text, entities, &input).into_iter();

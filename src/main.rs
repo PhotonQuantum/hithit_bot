@@ -51,8 +51,15 @@ async fn main() {
     Dispatcher::builder(
         bot,
         dptree::entry()
-            .branch(Update::filter_message().endpoint(message_handler))
-            .branch(Update::filter_edited_message().endpoint(edited_message_handler)),
+            .branch(Update::filter_message().branch(
+                dptree::filter(|msg: Message| msg.text().is_some()).endpoint(message_handler),
+            ))
+            .branch(
+                Update::filter_edited_message().branch(
+                    dptree::filter(|msg: Message| msg.text().is_some())
+                        .endpoint(edited_message_handler),
+                ),
+            ),
     )
     .dependencies(dptree::deps![booking])
     .build()
