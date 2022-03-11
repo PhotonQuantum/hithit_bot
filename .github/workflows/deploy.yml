@@ -34,3 +34,11 @@ jobs:
       - run: |
           curl -XPOST -u "PhotonQuantum:${{secrets.GH_TOKEN}}" -H "Accept: application/vnd.github.everest-preview+json" -H "Content-Type: application/json" https://api.github.com/repos/PhotonQuantum/aquarium/dispatches --data '{"event_type": "deploy"}'
         name: Launch 🚀
+      - name: Create Sentry release
+        uses: getsentry/action-release@v1
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        with:
+          environment: production
