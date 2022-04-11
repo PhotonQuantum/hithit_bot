@@ -14,6 +14,16 @@ pub fn process(
     booking: MutexGuard<ReplyBooking>,
     msg: &Message,
 ) -> Result<Segments> {
+    let prefix = if let Some(s) = option_env!("HITHIT_BOT_DELIMITER_BUILD") {
+        s.chars().next().unwrap_or('^')
+    } else {
+        std::env::var("HITHIT_BOT_DELIMITER")
+            .unwrap_or("^".to_string())
+            .chars()
+            .next()
+            .unwrap_or('^')
+    };
+
     let text = msg.text().ok_or(Error::ShouldNotHandle)?;
     let entities = msg.entities().ok_or(Error::ShouldNotHandle)?;
 
@@ -37,7 +47,7 @@ pub fn process(
                 Segments::build(text, entities)
                     .drain_head(1)
                     .map(|segments| Parser::new(segments, true))
-            } else if chr == '^' {
+            } else if chr == prefix {
                 Segments::build(text, entities)
                     .drain_head(2)
                     .map(|segments| Parser::new(segments, true))

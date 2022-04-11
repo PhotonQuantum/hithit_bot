@@ -35,6 +35,8 @@ Rendered:
 ...
 ```
 
+You can change prefix using `HITHIT_BOT_DELIMITER` environment variable or `HITHIT_BOT_DELIMITER_BUILD` in compile time (default is `^`).
+
 ## Get Started
 
 1. Change the const `BOT_NAME` into your bot name.
