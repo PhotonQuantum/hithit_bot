@@ -35,11 +35,11 @@ Rendered:
 ...
 ```
 
-You can change prefix using `HITHIT_BOT_DELIMITER` environment variable or `HITHIT_BOT_DELIMITER_BUILD` in compile time (default is `^`).
+You can change prefix using `HITHIT_BOT_PREFIX` environment variable or `HITHIT_BOT_PREFIX_BUILD` in compile time (default is `^`).
 
 ## Get Started
 
-1. Change the const `BOT_NAME` into your bot name.
+1. Declare `BOT_NAME` environment variable into your bot name (or you can set this environment variable at runtime as well).
 2. `cargo build --release`
 3. `TELOXIDE_TOKEN=xxx ./hithit_bot`
 

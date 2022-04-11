@@ -7,23 +7,13 @@ use crate::formatter::FormatContext;
 use crate::memory::ReplyBooking;
 use crate::parser::Parser;
 use crate::segments::{Segment, Segments};
-use crate::{EXPLAIN_COMMAND, EXPLAIN_COMMAND_EXTENDED};
+use crate::{COMMAND_PREFIX, EXPLAIN_COMMAND, EXPLAIN_COMMAND_EXTENDED};
 
 pub fn process(
     bot_user: &User,
     booking: MutexGuard<ReplyBooking>,
     msg: &Message,
 ) -> Result<Segments> {
-    let prefix = if let Some(s) = option_env!("HITHIT_BOT_DELIMITER_BUILD") {
-        s.chars().next().unwrap_or('^')
-    } else {
-        std::env::var("HITHIT_BOT_DELIMITER")
-            .unwrap_or("^".to_string())
-            .chars()
-            .next()
-            .unwrap_or('^')
-    };
-
     let text = msg.text().ok_or(Error::ShouldNotHandle)?;
     let entities = msg.entities().ok_or(Error::ShouldNotHandle)?;
 
@@ -33,9 +23,9 @@ pub fn process(
 
     let fmt_ctx = build_format_ctx(bot_user, booking, msg)?;
 
-    let parser = if text.starts_with(EXPLAIN_COMMAND_EXTENDED) {
+    let parser = if text.starts_with(EXPLAIN_COMMAND_EXTENDED.get().unwrap()) {
         Segments::build(text, entities)
-            .drain_head(EXPLAIN_COMMAND_EXTENDED.len() + 1)
+            .drain_head(EXPLAIN_COMMAND_EXTENDED.get().unwrap().len() + 1)
             .map(|segments| Parser::new(segments, true))
     } else if text.starts_with(EXPLAIN_COMMAND) {
         Segments::build(text, entities)
@@ -47,7 +37,7 @@ pub fn process(
                 Segments::build(text, entities)
                     .drain_head(1)
                     .map(|segments| Parser::new(segments, true))
-            } else if chr == prefix {
+            } else if chr == *COMMAND_PREFIX.get().unwrap() {
                 Segments::build(text, entities)
                     .drain_head(2)
                     .map(|segments| Parser::new(segments, true))

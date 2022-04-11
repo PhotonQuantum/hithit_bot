@@ -9,8 +9,8 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use const_format::concatcp;
 use futures_core::future::BoxFuture;
+use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use sentry::integrations::tracing::EventFilter;
 use sentry::{ClientOptions, IntoDsn};
@@ -36,13 +36,37 @@ mod segments;
 mod utils;
 
 const EXPLAIN_COMMAND: &str = "/explain";
-const BOT_NAME: &str = "hithit_rs_bot";
 //noinspection RsTypeCheck
-#[allow(clippy::semicolon_if_nothing_returned)]
-const EXPLAIN_COMMAND_EXTENDED: &str = concatcp!(EXPLAIN_COMMAND, "@", BOT_NAME);
+//#[allow(clippy::semicolon_if_nothing_returned)]
+//const EXPLAIN_COMMAND_EXTENDED: &str = concatcp!(EXPLAIN_COMMAND, "@", BOT_NAME);
+static EXPLAIN_COMMAND_EXTENDED: OnceCell<String> = OnceCell::new();
+static COMMAND_PREFIX: OnceCell<char> = OnceCell::new();
 
 #[tokio::main]
 async fn main() {
+    EXPLAIN_COMMAND_EXTENDED
+        .set(format!(
+            "{}@{}",
+            EXPLAIN_COMMAND,
+            std::env::var("BOT_NAME").unwrap_or_else(|_| option_env!("BOT_NAME")
+                .unwrap_or("hithit_rs_bot")
+                .to_string())
+        ))
+        .unwrap();
+    COMMAND_PREFIX
+        .set(
+            std::env::var("HITHIT_BOT_PREFIX")
+                .unwrap_or_else(|_| {
+                    option_env!("HITHIT_BOT_PREFIX_BUILD")
+                        .unwrap_or("^")
+                        .to_string()
+                })
+                .chars()
+                .next()
+                .unwrap_or('^'),
+        )
+        .unwrap();
+
     let _guard = sentry::init(ClientOptions {
         dsn: std::env::var("SENTRY_DSN")
             .ok()

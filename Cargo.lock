@@ -693,6 +693,7 @@ dependencies = [
  "log",
  "lru-cache",
  "maplit",
+ "once_cell",
  "parking_lot 0.12.0",
  "pest",
  "pest_derive",
