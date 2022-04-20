@@ -40,8 +40,9 @@ You can change prefix using `HITHIT_BOT_PREFIX` environment variable or `HITHIT_
 ## Get Started
 
 1. Declare `BOT_NAME` environment variable into your bot name (or you can set this environment variable at runtime as well).
-2. `cargo build --release`
-3. `TELOXIDE_TOKEN=xxx ./hithit_bot`
+2. Declare `BOT_SERVER` environment variable into your [custom api server](https://github.com/tdlib/telegram-bot-api) (or you can set this environment variable at runtime as well). If you don't know what this is, you can safely ignore it.  
+3. `cargo build --release`
+4. `TELOXIDE_TOKEN=xxx ./hithit_bot`
 
 ## LICENSE
 
