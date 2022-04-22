@@ -36,9 +36,6 @@ mod segments;
 mod utils;
 
 const EXPLAIN_COMMAND: &str = "/explain";
-//noinspection RsTypeCheck
-//#[allow(clippy::semicolon_if_nothing_returned)]
-//const EXPLAIN_COMMAND_EXTENDED: &str = concatcp!(EXPLAIN_COMMAND, "@", BOT_NAME);
 static EXPLAIN_COMMAND_EXTENDED: OnceCell<String> = OnceCell::new();
 static COMMAND_PREFIX: OnceCell<char> = OnceCell::new();
 
@@ -89,7 +86,14 @@ async fn main() {
 
     log::warn!("Starting hithit bot");
 
-    let bot = Bot::from_env().auto_send();
+    let url = std::env::var("BOT_SERVER").unwrap_or_else(|_| {
+        option_env!("BOT_SERVER")
+            .unwrap_or("https://api.telegram.org")
+            .to_string()
+    });
+    let bot = Bot::from_env()
+        .set_api_url(url.parse().expect("Parse telegram bot api url error."))
+        .auto_send();
 
     let booking = Arc::new(Mutex::new(ReplyBooking::with_capacity(8192)));
 
