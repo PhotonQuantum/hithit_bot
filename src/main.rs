@@ -92,7 +92,7 @@ async fn main() {
             .to_string()
     });
     let bot = Bot::from_env()
-        .set_api_url(reqwest::Url::parse(&url).expect("Parse telegram bot api url error."))
+        .set_api_url(url.parse().expect("Parse telegram bot api url error."))
         .auto_send();
 
     let booking = Arc::new(Mutex::new(ReplyBooking::with_capacity(8192)));

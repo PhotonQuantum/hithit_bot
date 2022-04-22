@@ -699,7 +699,6 @@ dependencies = [
  "pest_derive",
  "pretty_env_logger",
  "ranges",
- "reqwest",
  "sentry",
  "serde",
  "serde_json",
