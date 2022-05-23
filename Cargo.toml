@@ -23,7 +23,7 @@ pest = "2.1"
 pest_derive = "2.1"
 pretty_env_logger = "0.4"
 ranges = "0.3"
-sentry = { version = "0.25", default-features = false, features = ["tracing", "backtrace", "contexts", "panic", "reqwest", "rustls"] }
+sentry = { version = "0.26", default-features = false, features = ["tracing", "backtrace", "contexts", "panic", "reqwest", "rustls"] }
 futures-core = "0.3"
 serde = "1.0"
 serde_json = "1.0"
