@@ -14,6 +14,8 @@ xxx aww了 自己！
 xxx 它 自己 掉毛！
 : /{sender} {receiver} {} {0}
 xxx xxx ooo ooo ooo！
+: /{s} {r} {} {0}
+xxx xxx ooo ooo ooo！
 : /{blabla}
 key blabla not found
 : /{1}

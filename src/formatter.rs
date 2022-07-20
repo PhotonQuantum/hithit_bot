@@ -36,7 +36,9 @@ impl FormatContext {
             indexed_args: vec![sender.clone(), receiver.clone()],
             named_args: hashmap! {
                 "sender" => sender.clone(),
-                "receiver" => receiver,
+                "receiver" => receiver.clone(),
+                "s" => sender.clone(),
+                "r" => receiver,
                 "penetrator" => sender,  // suggested by @tonyxty
                 "self" => me.clone(),
                 "me" => me.clone(),
