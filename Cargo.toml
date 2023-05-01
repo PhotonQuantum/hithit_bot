@@ -20,7 +20,7 @@ maplit = "1"
 once_cell = "1.17"
 parking_lot = "0.12"
 pest = "2.5"
-pest_derive = "2.5"
+pest_derive = "2.6"
 pretty_env_logger = "0.4"
 ranges = "0.3"
 sentry = { version = "0.31", default-features = false, features = ["tracing", "backtrace", "contexts", "panic", "reqwest", "rustls"] }
