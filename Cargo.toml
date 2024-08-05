@@ -37,4 +37,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [build-dependencies]
 anyhow = "1.0"
-vergen = { version = "7", default-features = false, features = ["git"] }
+vergen = { version = "8", default-features = false, features = ["git"] }
