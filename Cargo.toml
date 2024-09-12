@@ -8,7 +8,7 @@ build = "build.rs"
 
 [features]
 default = ["webhook"]
-webhook = ["teloxide-listener/webhook"]
+webhook = ["teloxide/webhooks-axum"]
 
 [dependencies]
 const_format = "0.2"
@@ -27,8 +27,7 @@ sentry = { version = "0.34", default-features = false, features = ["tracing", "b
 futures-core = "0.3"
 serde = "1.0"
 serde_json = "1.0"
-teloxide = { version = "0.7", default-features = false, features = ["ctrlc_handler", "cache-me", "dispatching2", "rustls", "auto-send"] }
-teloxide-listener = "0.1.0-beta.1"
+teloxide = { version = "0.13", default-features = false, features = ["ctrlc_handler", "cache-me", "rustls"] }
 thiserror = "1.0"
 tokio = { version = "1.38", features = ["rt", "rt-multi-thread", "macros"] }
 tokio-stream = "0.1"
@@ -37,4 +36,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [build-dependencies]
 anyhow = "1.0"
-vergen = { version = "7", default-features = false, features = ["git"] }
+vergen-gix = "1.0"

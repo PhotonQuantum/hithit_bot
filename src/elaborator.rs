@@ -31,7 +31,7 @@ fn elaborate_input(
         },
         Segment {
             kind: hashset! {MessageEntityKind::Code},
-            text: format!("{}\n{:#?}\n", text, entities),
+            text: format!("{text}\n{entities:#?}\n"),
         },
         Segment {
             kind: hashset! {MessageEntityKind::Bold},
@@ -39,7 +39,7 @@ fn elaborate_input(
         },
         Segment {
             kind: hashset! {MessageEntityKind::Code},
-            text: format!("{:#?}\n", segments),
+            text: format!("{segments:#?}\n"),
         },
     ]
 }
@@ -52,7 +52,7 @@ fn elaborate_output(segments: &Segments) -> impl IntoIterator<Item = Segment> {
         },
         Segment {
             kind: hashset! {MessageEntityKind::Code},
-            text: format!("{:#?}\n", segments),
+            text: format!("{segments:#?}\n"),
         },
         Segment {
             kind: hashset! {MessageEntityKind::Bold},

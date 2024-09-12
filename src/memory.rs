@@ -1,13 +1,11 @@
-use std::borrow::Borrow;
-
 use eyre::{ContextCompat, Report};
 use lru_cache::LruCache;
-use teloxide::types::{Message, User};
+use teloxide::types::{ChatId, Message, MessageId, User};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct MessageMeta {
-    pub chat_id: i64,
-    pub message_id: i32,
+    pub chat_id: ChatId,
+    pub message_id: MessageId,
     pub sender: User,
 }
 
@@ -15,14 +13,10 @@ impl TryFrom<Message> for MessageMeta {
     type Error = Report;
 
     fn try_from(msg: Message) -> Result<Self, Self::Error> {
-        let msg = msg.borrow();
         Ok(Self {
             chat_id: msg.chat.id,
             message_id: msg.id,
-            sender: msg
-                .from()
-                .wrap_err("failed to get sender from message")?
-                .clone(),
+            sender: msg.from.wrap_err("failed to get sender from message")?,
         })
     }
 }
@@ -31,14 +25,13 @@ impl TryFrom<&Message> for MessageMeta {
     type Error = Report;
 
     fn try_from(msg: &Message) -> Result<Self, Self::Error> {
-        let msg = msg.borrow();
         Ok(Self {
             chat_id: msg.chat.id,
             message_id: msg.id,
             sender: msg
-                .from()
-                .wrap_err("failed to get sender from message")?
-                .clone(),
+                .from
+                .clone()
+                .wrap_err("failed to get sender from message")?,
         })
     }
 }

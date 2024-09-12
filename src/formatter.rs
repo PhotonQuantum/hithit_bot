@@ -84,9 +84,8 @@ fn fill_placeholder(
                 .indexed_args
                 .get(implicit_idx)
                 .ok_or(FormatError::InvalidIndex(implicit_idx))
-                .map(|v| {
+                .inspect(|_| {
                     implicit_idx += 1;
-                    v
                 }),
             HoleIdent::Indexed(idx) => ctx
                 .indexed_args

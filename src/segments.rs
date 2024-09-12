@@ -49,7 +49,7 @@ pub struct Segments {
 }
 
 impl Segments {
-    pub fn new(data: VecDeque<Segment>) -> Self {
+    pub const fn new(data: VecDeque<Segment>) -> Self {
         Self { data }
     }
 }

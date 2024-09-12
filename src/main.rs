@@ -6,6 +6,7 @@
     clippy::default_trait_access
 )]
 
+use std::env;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -14,10 +15,11 @@ use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use sentry::integrations::tracing::EventFilter;
 use sentry::{ClientOptions, IntoDsn};
+use teloxide::dispatching::{Dispatcher, UpdateFilterExt};
 use teloxide::error_handlers::ErrorHandler;
-use teloxide::prelude2::*;
-use teloxide::Bot;
-use teloxide_listener::Listener;
+use teloxide::types::{Message, Update};
+use teloxide::update_listeners;
+use teloxide::{dptree, Bot};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
@@ -91,18 +93,12 @@ async fn main() {
             .unwrap_or("https://api.telegram.org")
             .to_string()
     });
-    let bot = Bot::from_env()
-        .set_api_url(url.parse().expect("Parse telegram bot api url error."))
-        .auto_send();
+    let bot = Bot::from_env().set_api_url(url.parse().expect("Parse telegram bot api url error."));
 
     let booking = Arc::new(Mutex::new(ReplyBooking::with_capacity(8192)));
 
-    let listener = Listener::from_env_with_prefix("APP_")
-        .build(bot.clone())
-        .await;
-
-    Dispatcher::builder(
-        bot,
+    let mut dp = Dispatcher::builder(
+        bot.clone(),
         dptree::entry()
             .branch(Update::filter_message().branch(
                 dptree::filter(|msg: Message| msg.text().is_some()).endpoint(message_handler),
@@ -115,10 +111,37 @@ async fn main() {
             ),
     )
     .dependencies(dptree::deps![booking])
-    .build()
-    .setup_ctrlc_handler()
-    .dispatch_with_listener(listener, Arc::new(TracingErrorHandler))
-    .await;
+    .enable_ctrlc_handler()
+    .build();
+
+    if let (Ok(base), Ok(path), Ok(addr)) = (
+        env::var("APP_WEBHOOK_URL"),
+        env::var("APP_WEBHOOK_PATH"),
+        env::var("APP_BIND_ADDR"),
+    ) {
+        Box::pin(
+            dp.dispatch_with_listener(
+                update_listeners::webhooks::axum(
+                    bot,
+                    update_listeners::webhooks::Options::new(
+                        addr.parse().expect("invalid bind address"),
+                        base.parse().expect("invalid base url"),
+                    )
+                    .path(path),
+                )
+                .await
+                .expect("failed to start webhook"),
+                Arc::new(TracingErrorHandler),
+            ),
+        )
+        .await;
+    } else {
+        Box::pin(dp.dispatch_with_listener(
+            update_listeners::polling_default(bot).await,
+            Arc::new(TracingErrorHandler),
+        ))
+        .await;
+    }
 }
 
 struct TracingErrorHandler;

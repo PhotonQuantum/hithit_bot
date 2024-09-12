@@ -13,6 +13,7 @@ pub type Error = pest::error::Error<Rule>;
 #[grammar = "fmt.pest"]
 struct FmtParser;
 
+#[allow(clippy::result_large_err)]
 pub fn parse(segments: &Segments) -> Result<Formatter, Error> {
     let mut ast = vec![];
     let mut anonymous_counter = 0;
@@ -34,7 +35,7 @@ pub fn parse(segments: &Segments) -> Result<Formatter, Error> {
                             if !buffer.is_empty() {
                                 ast.push(Token::Segment(Segment {
                                     kind: segment.kind.clone(),
-                                    text: buffer.drain(..).collect(),
+                                    text: std::mem::take(&mut buffer),
                                 }));
                             };
                             ast.push(Token::Hole {
@@ -69,7 +70,7 @@ pub fn parse(segments: &Segments) -> Result<Formatter, Error> {
                 if !buffer.is_empty() {
                     ast.push(Token::Segment(Segment {
                         kind: segment.kind.clone(),
-                        text: buffer.drain(..).collect(),
+                        text: std::mem::take(&mut buffer),
                     }));
                 };
             }

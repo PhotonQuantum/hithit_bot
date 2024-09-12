@@ -29,7 +29,7 @@ fn event_from_report(r: &Report) -> Option<Event<'static>> {
 
     if let Some(backtrace) = handler.backtrace() {
         exc.stacktrace =
-            sentry::integrations::backtrace::parse_stacktrace(&format!("{:#?}", backtrace));
+            sentry::integrations::backtrace::parse_stacktrace(&format!("{backtrace:#?}"));
     }
 
     Some(event)

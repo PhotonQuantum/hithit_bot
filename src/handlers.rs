@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use eyre::{Result, WrapErr};
 use parking_lot::Mutex;
-use teloxide::prelude2::*;
+use teloxide::payloads::{EditMessageTextSetters, SendMessageSetters};
+use teloxide::requests::Requester;
+use teloxide::types::{Message, ReplyParameters};
+use teloxide::Bot;
 use tracing::instrument;
 
 use crate::elaborator::{elaborate, elaborate_error};
@@ -12,10 +15,10 @@ use crate::process::process;
 use crate::utils::sentry_capture;
 use crate::EXPLAIN_COMMAND;
 
-#[instrument(fields(from = msg.chat.id, msg = ? msg.text()), skip(msg, bot, booking))]
+#[instrument(fields(from = %msg.chat.id, msg = ? msg.text()), skip(msg, bot, booking))]
 pub async fn message_handler(
     msg: Message,
-    bot: AutoSend<Bot>,
+    bot: Bot,
     booking: Arc<Mutex<ReplyBooking>>,
 ) -> Result<()> {
     let me = &sentry_capture(bot.get_me().await)?.user;
@@ -34,7 +37,7 @@ pub async fn message_handler(
     let sent_reply = sentry_capture(
         bot.send_message(msg.chat.id, reply.text())
             .entities(reply.entities())
-            .reply_to_message_id(msg.id)
+            .reply_parameters(ReplyParameters::new(msg.id))
             .await
             .wrap_err("Cannot send reply message"),
     )?;
@@ -47,10 +50,10 @@ pub async fn message_handler(
     Ok(())
 }
 
-#[instrument(fields(from = msg.chat.id, msg = ? msg.text()), skip(msg, bot, booking))]
+#[instrument(fields(from = %msg.chat.id, msg = ? msg.text()), skip(msg, bot, booking))]
 pub async fn edited_message_handler(
     msg: Message,
-    bot: AutoSend<Bot>,
+    bot: Bot,
     booking: Arc<Mutex<ReplyBooking>>,
 ) -> Result<()> {
     let unique_id = sentry_capture(MessageMeta::try_from(&msg))?;
@@ -58,7 +61,7 @@ pub async fn edited_message_handler(
     let me = &sentry_capture(bot.get_me().await)?.user;
     let output = process(me, booking.lock(), &msg);
 
-    if let Err(Error::ShouldNotHandle) = output {
+    if matches!(output, Err(Error::ShouldNotHandle)) {
         // this is no longer a valid msg, delete previous reply
         let reply_id = booking.lock().forward_lookup(&unique_id).cloned();
         if let Some(reply_id) = reply_id {
@@ -94,7 +97,7 @@ pub async fn edited_message_handler(
         sentry_capture(
             bot.send_message(msg.chat.id, reply.text())
                 .entities(reply.entities())
-                .reply_to_message_id(msg.id)
+                .reply_parameters(ReplyParameters::new(msg.id))
                 .await
                 .wrap_err("Cannot reply to edited message"),
         )?

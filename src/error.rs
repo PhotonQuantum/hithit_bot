@@ -19,7 +19,13 @@ pub enum Error {
     #[error("format error: {0}")]
     Format(#[from] Format),
     #[error("parse error: {0}")]
-    Parse(#[from] Parse),
+    Parse(#[from] Box<Parse>),
+}
+
+impl From<Parse> for Error {
+    fn from(value: Parse) -> Self {
+        Self::Parse(Box::new(value))
+    }
 }
 
 pub trait ErrorExt<T> {
@@ -41,5 +47,11 @@ pub enum ExportedError {
     #[error("format error: {0}")]
     Format(#[from] Format),
     #[error("parse error: {0}")]
-    Parse(#[from] Parse),
+    Parse(#[from] Box<Parse>),
+}
+
+impl From<Parse> for ExportedError {
+    fn from(value: Parse) -> Self {
+        Self::Parse(Box::new(value))
+    }
 }

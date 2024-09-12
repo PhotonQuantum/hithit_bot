@@ -1,6 +1,5 @@
 use parking_lot::MutexGuard;
-use teloxide::prelude2::*;
-use teloxide::types::User;
+use teloxide::types::{Message, User};
 
 use crate::error::{Error, Result};
 use crate::formatter::FormatContext;
@@ -61,14 +60,14 @@ fn get_reply_user(
     message: &Message,
 ) -> Option<Segment> {
     Some(if let Some(reply_msg) = message.reply_to_message() {
-        let user = reply_msg.from()?;
+        let user = reply_msg.from.as_ref()?;
         if user == bot_user {
             let cached_msg = booking.reverse_lookup(&reply_msg.try_into().ok()?);
             cached_msg.map_or_else(
                 || user.into(),
                 |msg| {
                     let sender = &msg.sender;
-                    message.from().map_or_else(
+                    message.from.as_ref().map_or_else(
                         || sender.into(),
                         |curr_sender| {
                             if sender == curr_sender {
@@ -84,7 +83,7 @@ fn get_reply_user(
             user.into()
         }
     } else {
-        Segment::from_user_with_name(message.from()?.clone(), String::from("自己"))
+        Segment::from_user_with_name(message.from.clone()?, String::from("自己"))
     })
 }
 
@@ -93,9 +92,9 @@ fn build_format_ctx(
     booking: MutexGuard<ReplyBooking>,
     msg: &Message,
 ) -> Result<FormatContext> {
-    let sender = Segment::from_user(msg.from().ok_or(Error::ShouldNotHandle)?.clone());
+    let sender = Segment::from_user(msg.from.clone().ok_or(Error::ShouldNotHandle)?);
     let me = Segment::from_user_with_name(
-        msg.from().ok_or(Error::ShouldNotHandle)?.clone(),
+        msg.from.clone().ok_or(Error::ShouldNotHandle)?,
         String::from("自己"),
     );
     let receiver = get_reply_user(bot_user, booking, msg).ok_or(Error::ShouldNotHandle)?;
