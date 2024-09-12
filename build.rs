@@ -5,5 +5,6 @@ fn main() -> anyhow::Result<()> {
     Emitter::new()
         .add_instructions(&GixBuilder::default().sha(true).build()?)?
         .emit()?;
+    println!("cargo:rerun-if-changed=migrations");
     Ok(())
 }

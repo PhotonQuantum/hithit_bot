@@ -15,14 +15,78 @@ use crate::process::process;
 use crate::utils::sentry_capture;
 use crate::EXPLAIN_COMMAND;
 
+#[instrument(fields(from = %msg.chat.id, msg = ? msg.text()), skip(msg, bot, pool))]
+pub async fn compatibility_handler(
+    msg: Message,
+    bot: Bot,
+    mode: bool,
+    pool: sqlx::PgPool,
+) -> Result<()> {
+    if !msg.chat.is_group() && !msg.chat.is_supergroup() {
+        bot.send_message(
+            msg.chat.id,
+            "Compatibility mode is only available in groups and supergroups.",
+        )
+        .await?;
+        return Ok(());
+    }
+
+    // Check if the user has the necessary permissions
+    let Some(user) = msg.from else {
+        bot.send_message(
+            msg.chat.id,
+            "You must be a member of the group to set compatibility mode.",
+        )
+        .await?;
+        return Ok(());
+    };
+    let chat_member = bot.get_chat_member(msg.chat.id, user.id).await?;
+    if !chat_member.is_privileged() {
+        bot.send_message(
+            msg.chat.id,
+            "You must be an admin to set compatibility mode.",
+        )
+        .await?;
+        return Ok(());
+    }
+
+    // Set the compatibility mode
+    let result = if mode {
+        // Insert id into the database
+        sqlx::query!(
+            "INSERT INTO compatibility (id) VALUES ($1) ON CONFLICT DO NOTHING",
+            msg.chat.id.0
+        )
+        .execute(&pool)
+        .await?
+    } else {
+        // Remove id from the database
+        sqlx::query!("DELETE FROM compatibility WHERE id = $1", msg.chat.id.0)
+            .execute(&pool)
+            .await?
+    };
+    let report = match (result.rows_affected() > 0, mode) {
+        (true, true) => "Compatibility mode enabled.",
+        (false, true) => "Compatibility mode already enabled.",
+        (true, false) => "Compatibility mode disabled.",
+        (false, false) => "Compatibility mode already disabled.",
+    };
+    bot.send_message(msg.chat.id, report).await?;
+    Ok(())
+}
+
 #[instrument(fields(from = %msg.chat.id, msg = ? msg.text()), skip(msg, bot, booking))]
 pub async fn message_handler(
     msg: Message,
     bot: Bot,
     booking: Arc<Mutex<ReplyBooking>>,
+    pool: sqlx::PgPool,
 ) -> Result<()> {
     let me = &sentry_capture(bot.get_me().await)?.user;
-    let output = process(me, booking.lock(), &msg).lift_should_not_handle()?;
+
+    let output = process(me, &booking, &msg, pool)
+        .await
+        .lift_should_not_handle()?;
 
     let reply = if msg
         .text()
@@ -50,16 +114,16 @@ pub async fn message_handler(
     Ok(())
 }
 
-#[instrument(fields(from = %msg.chat.id, msg = ? msg.text()), skip(msg, bot, booking))]
 pub async fn edited_message_handler(
     msg: Message,
     bot: Bot,
     booking: Arc<Mutex<ReplyBooking>>,
+    pool: sqlx::PgPool,
 ) -> Result<()> {
     let unique_id = sentry_capture(MessageMeta::try_from(&msg))?;
 
-    let me = &sentry_capture(bot.get_me().await)?.user;
-    let output = process(me, booking.lock(), &msg);
+    let me = sentry_capture(bot.get_me().await)?.user;
+    let output = process(&me, &booking, &msg, pool).await;
 
     if matches!(output, Err(Error::ShouldNotHandle)) {
         // this is no longer a valid msg, delete previous reply

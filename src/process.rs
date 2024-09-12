@@ -4,13 +4,14 @@ use crate::memory::ReplyBooking;
 use crate::parser::Parser;
 use crate::segments::{Segment, Segments};
 use crate::{COMMAND_PREFIX, EXPLAIN_COMMAND, EXPLAIN_COMMAND_EXTENDED};
-use parking_lot::MutexGuard;
+use parking_lot::Mutex;
 use teloxide::types::{Message, User};
 
-pub fn process(
+pub async fn process(
     bot_user: &User,
-    booking: MutexGuard<ReplyBooking>,
+    booking: &Mutex<ReplyBooking>,
     msg: &Message,
+    pool: sqlx::PgPool,
 ) -> Result<Segments> {
     let text = msg.text().ok_or(Error::ShouldNotHandle)?;
     let entities = msg.entities().ok_or(Error::ShouldNotHandle)?;
@@ -19,7 +20,12 @@ pub fn process(
         return Err(Error::ShouldNotHandle);
     }
 
-    let fmt_ctx = build_format_ctx(bot_user, booking, msg)?;
+    let compatibility = sqlx::query!("SELECT id FROM compatibility WHERE id = $1", msg.chat.id.0)
+        .fetch_optional(&pool)
+        .await
+        .map_or(false, |row| row.is_some());
+
+    let fmt_ctx = build_format_ctx(bot_user, &mut booking.lock(), msg)?;
 
     let parser = if text.starts_with(EXPLAIN_COMMAND_EXTENDED.get().unwrap()) {
         Segments::build(text, entities)
@@ -34,11 +40,11 @@ pub fn process(
             if chr.len_utf8() > 1 {
                 Segments::build(text, entities)
                     .drain_head(1)
-                    .map(|segments| Parser::new(segments, true))
+                    .map(|segments| Parser::new(segments, !compatibility))
             } else if chr == *COMMAND_PREFIX.get().unwrap() {
                 Segments::build(text, entities)
                     .drain_head(2)
-                    .map(|segments| Parser::new(segments, true))
+                    .map(|segments| Parser::new(segments, !compatibility))
             } else {
                 Segments::build(text, entities)
                     .drain_head(1)
@@ -55,7 +61,7 @@ pub fn process(
 
 fn get_reply_user(
     bot_user: &User,
-    mut booking: MutexGuard<ReplyBooking>,
+    booking: &mut ReplyBooking,
     message: &Message,
 ) -> Option<Segment> {
     Some(if let Some(reply_msg) = message.reply_to_message() {
@@ -88,7 +94,7 @@ fn get_reply_user(
 
 fn build_format_ctx(
     bot_user: &User,
-    booking: MutexGuard<ReplyBooking>,
+    booking: &mut ReplyBooking,
     msg: &Message,
 ) -> Result<FormatContext> {
     let sender = Segment::from_user(msg.from.clone().ok_or(Error::ShouldNotHandle)?);

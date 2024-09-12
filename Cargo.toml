@@ -13,6 +13,7 @@ webhook = ["teloxide/webhooks-axum"]
 [dependencies]
 const_format = "0.2"
 color-eyre = "0.6"
+dotenvy = "0.15"
 eyre = "0.6"
 log = "0.4"
 lru-cache = "0.1"
@@ -27,7 +28,8 @@ sentry = { version = "0.34", default-features = false, features = ["tracing", "b
 futures-core = "0.3"
 serde = "1.0"
 serde_json = "1.0"
-teloxide = { version = "0.13", default-features = false, features = ["ctrlc_handler", "cache-me", "rustls"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "migrate", "macros", "postgres"] }
+teloxide = { version = "0.13", default-features = false, features = ["ctrlc_handler", "cache-me", "rustls", "macros"] }
 thiserror = "1.0"
 tokio = { version = "1.38", features = ["rt", "rt-multi-thread", "macros"] }
 tokio-stream = "0.1"
