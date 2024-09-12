@@ -1,12 +1,11 @@
-use parking_lot::MutexGuard;
-use teloxide::types::{Message, User};
-
 use crate::error::{Error, Result};
 use crate::formatter::FormatContext;
 use crate::memory::ReplyBooking;
 use crate::parser::Parser;
 use crate::segments::{Segment, Segments};
 use crate::{COMMAND_PREFIX, EXPLAIN_COMMAND, EXPLAIN_COMMAND_EXTENDED};
+use parking_lot::MutexGuard;
+use teloxide::types::{Message, User};
 
 pub fn process(
     bot_user: &User,

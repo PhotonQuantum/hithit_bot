@@ -17,6 +17,7 @@ use sentry::integrations::tracing::EventFilter;
 use sentry::{ClientOptions, IntoDsn};
 use teloxide::dispatching::{Dispatcher, UpdateFilterExt};
 use teloxide::error_handlers::ErrorHandler;
+use teloxide::requests::Requester;
 use teloxide::types::{Message, Update};
 use teloxide::update_listeners;
 use teloxide::{dptree, Bot};
@@ -43,18 +44,9 @@ static COMMAND_PREFIX: OnceCell<char> = OnceCell::new();
 
 #[tokio::main]
 async fn main() {
-    EXPLAIN_COMMAND_EXTENDED
-        .set(format!(
-            "{}@{}",
-            EXPLAIN_COMMAND,
-            std::env::var("BOT_NAME").unwrap_or_else(|_| option_env!("BOT_NAME")
-                .unwrap_or("hithit_rs_bot")
-                .to_string())
-        ))
-        .unwrap();
     COMMAND_PREFIX
         .set(
-            std::env::var("HITHIT_BOT_PREFIX")
+            env::var("HITHIT_BOT_PREFIX")
                 .unwrap_or_else(|_| {
                     option_env!("HITHIT_BOT_PREFIX_BUILD")
                         .unwrap_or("^")
@@ -67,7 +59,7 @@ async fn main() {
         .unwrap();
 
     let _guard = sentry::init(ClientOptions {
-        dsn: std::env::var("SENTRY_DSN")
+        dsn: env::var("SENTRY_DSN")
             .ok()
             .and_then(|dsn| dsn.into_dsn().ok().flatten()),
         release: Some(env!("VERGEN_GIT_SHA").into()),
@@ -88,12 +80,18 @@ async fn main() {
 
     log::warn!("Starting hithit bot");
 
-    let url = std::env::var("BOT_SERVER").unwrap_or_else(|_| {
+    let url = env::var("BOT_SERVER").unwrap_or_else(|_| {
         option_env!("BOT_SERVER")
             .unwrap_or("https://api.telegram.org")
             .to_string()
     });
     let bot = Bot::from_env().set_api_url(url.parse().expect("Parse telegram bot api url error."));
+
+    let bot_info = bot.get_me().await.expect("Unable to get bot info.");
+    let bot_name = bot_info.username();
+    EXPLAIN_COMMAND_EXTENDED
+        .set(format!("{}@{}", EXPLAIN_COMMAND, bot_name))
+        .unwrap();
 
     let booking = Arc::new(Mutex::new(ReplyBooking::with_capacity(8192)));
 
