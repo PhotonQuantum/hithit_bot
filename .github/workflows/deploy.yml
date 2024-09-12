@@ -11,22 +11,19 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/master' }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         name: Checkout 🛎️
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         name: Setup Cargo Toolchain 🛎️
         with:
-          profile: minimal
-          toolchain: stable
-          target: x86_64-unknown-linux-musl
-          default: true
+          targets: x86_64-unknown-linux-musl
       - run: sudo apt-get install -y musl-tools
         name: Setup musl 🔧
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
       - run: cargo build --release --target x86_64-unknown-linux-musl
         name: Build Release Binary 🚀
       - run: cp target/x86_64-unknown-linux-musl/release/hithit_bot ./
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         name: Upload Artifact
         with:
           name: release-musl

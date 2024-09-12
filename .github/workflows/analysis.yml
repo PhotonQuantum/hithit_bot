@@ -10,21 +10,19 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.ref == 'refs/heads/master' }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         name: Checkout 🛎️
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         name: Setup Cargo Toolchain 🛎️
         with:
           components: clippy
-          toolchain: stable
-          override: true
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
       - run: cargo install --locked clippy-sarif
         name: Install clippy-sarif 🛎️
       - run:
           cargo clippy --all-targets --message-format=json | clippy-sarif > results.sarif
         name: Run Clippy Lints 🔨
-      - uses: github/codeql-action/upload-sarif@v1
+      - uses: github/codeql-action/upload-sarif@v3
         name: Upload SARIF file 🚀
         with:
           sarif_file: results.sarif
