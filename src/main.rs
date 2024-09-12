@@ -34,6 +34,7 @@ use tracing_subscriber::{EnvFilter, Layer};
 use crate::handlers::{compatibility_handler, edited_message_handler, message_handler};
 use crate::memory::ReplyBooking;
 
+mod axum_listener;
 mod elaborator;
 mod error;
 mod formatter;
@@ -161,7 +162,7 @@ async fn main() {
     ) {
         Box::pin(
             dp.dispatch_with_listener(
-                update_listeners::webhooks::axum(
+                axum_listener::axum(
                     bot,
                     update_listeners::webhooks::Options::new(
                         addr.parse().expect("invalid bind address"),

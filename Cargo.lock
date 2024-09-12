@@ -1460,6 +1460,7 @@ name = "hithit_bot"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "color-eyre",
  "const_format",
  "dotenvy",
