@@ -30,7 +30,7 @@ futures-core = "0.3"
 serde = "1.0"
 serde_json = "1.0"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "migrate", "macros", "postgres"] }
-teloxide = { version = "0.13", default-features = false, features = ["ctrlc_handler", "cache-me", "rustls", "macros"] }
+teloxide = { version = "0.17", default-features = false, features = ["ctrlc_handler", "cache-me", "rustls", "macros"] }
 thiserror = "2.0"
 tokio = { version = "1.47", features = ["rt", "rt-multi-thread", "macros"] }
 tokio-stream = "0.1"
