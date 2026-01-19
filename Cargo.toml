@@ -39,4 +39,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [build-dependencies]
 anyhow = "1.0"
-vergen-gix = "1.0"
+vergen-gix = "9.1"
