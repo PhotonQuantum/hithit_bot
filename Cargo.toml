@@ -11,7 +11,7 @@ default = ["webhook"]
 webhook = ["teloxide/webhooks-axum", "axum"]
 
 [dependencies]
-axum = { version = "0.7", optional = true }
+axum = { version = "0.8", optional = true }
 const_format = "0.2"
 color-eyre = "0.6"
 dotenvy = "0.15"
